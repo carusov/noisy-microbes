@@ -33,7 +33,8 @@ usearch -fastq_mergepairs $DATA_PATH/raw/*R1.fastq \
 	-fastq_pctid 50 \
 	-fastq_minmergelen 245 \
 	-fastq_maxmergelen 255 \
-	-relabel @ -report $DATA_PATH/reports/merge_report.txt
+	-relabel @ \
+        -report $DATA_PATH/reports/merge_report.txt
 
 # Create a report of the expected errors of the merged reads
 usearch -fastq_eestats2 $DATA_PATH/clean/pooled_merged.fastq \
