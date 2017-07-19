@@ -1,0 +1,97 @@
+---
+title: "FASTQ Filtering Script"
+author: "Vincent Caruso"
+date: "July 9, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library("knitr")
+knitr::opts_chunk$set(echo = TRUE)
+opts_knit$set(root.dir = "~/projects/thesis/data")
+```
+
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("dada2")
+library("dada2"); packageVersion("dada2")
+library("ggplot2")
+library("stringr")
+
+```
+
+##Filter .fastq files
+
+There are two strategies I'm considering for quality filtering the raw .fastq files from the mock community dilution series sequencing experiment:
+
+1. Merge forward and reverse reads first, taking advantage of potentially improved posterior Q scores that result from overlapping reads, and then quality filter the merged reads based on expected errors. This approach entails the use of the `fastq_mergepairs` function in USEARCH.
+
+2. Truncate the low-quality heads and tails of forward and reverse reads independently, then merge the truncated reads, and finally quality filter the merged reads, again based on expected errors. This approach requires the use of the `fastqPairedFilter` function in DADA2 for the initial truncation step, since only this filter maintains the consistent ordering of the forward and reverse reads.
+
+Here, I'll use approach #2. 
+
+First, I'll look at the quality profile of each read set to determine where to truncate.
+```{r}
+
+data_path <- "~/projects/thesis/data"
+setwd(data_path)
+raw_path <- file.path(data_path, "raw")
+
+file_names <- list.files(raw_path)
+fastqs <- str_subset(file_names, ".fastq$")
+fastq_Fs <- str_subset(fastqs, "_R1")
+fastq_Rs <- str_subset(fastqs, "_R2")
+
+#get the sample names
+sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
+
+qual_path <- file.path(data_path, "quality")
+if (!file_test("-d", qual_path)) dir.create(qual_path)
+
+#plot quality
+for (fq in fastqs){
+  plotQualityProfile(file.path(raw_path, fq)) + 
+  scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+  scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+  theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
+  ggtitle(str_replace(fq, ".fastq", ""))
+  
+  fname <- str_replace(fq, "fastq", "png")
+  ggsave(file.path(qual_path, fname), width = 10, height = 7)
+}
+
+# plotQualityProfile(file.path("raw", fastq_Fs[10])) + 
+#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+#   theme(panel.grid.major = element_line(colour="grey", size=0.5))
+# plotQualityProfile(file.path("raw", fastq_Rs[7])) + 
+#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) + 
+#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+#   theme(panel.grid.major = element_line(colour="grey", size=0.5))
+
+
+```
+
+Based on the quality profiles, I'll truncate the forward reads at position 230, and the reverse at position 210. I'll also strip the first 15 nucleotides.
+```{r}
+
+# Set up a directory and file names for the truncated reads
+trunc_path <- file.path(data_path, "truncated")
+if (!file_test("-d", trunc_path)) dir.create(trunc_path)
+
+# trunc_Fs <- file.path(trunc_path, paste0(sample_names, "_F_trunc.fastq"))
+# trunc_Rs <- file.path(trunc_path, paste0(sample_names, "_R_trunc.fastq"))
+trunc_Fs <- paste0(sample_names, "_trunc_R1.fastq")
+trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
+
+# Truncate and filter paired read sets
+for (i in seq_along(fastq_Fs)){
+  fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(trunc_path, c(trunc_Fs[i], trunc_Rs[i])), 
+                    truncLen = c(230, 210), trimLeft = 15,
+                    maxN = Inf, maxEE = c(Inf, Inf), truncQ = 2, rm.phix = TRUE,
+                    compress = FALSE, verbose = TRUE)
+}
+
+```
+
