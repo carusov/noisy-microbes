@@ -18,9 +18,14 @@ usearch -fastx_uniques $DATA/clean/pooled_filtered.fastq \
 # Now denoise the reads into ZOTUs using the UNOISE2 algorithm
 usearch -unoise3 $DATA/clean/pooled_uniques.fastq \
 	-zotus $DATA/unoise/zotus.fa \
-	-chimeras $DATA/unoise/chimeras.fa \
-	-tabbedout $DATA/unoise/unoise3.txt \
-	-relabel ZOTU 
+	-ampout $DATA/unoise/amplicons.fa \
+	-tabbedout $DATA/unoise/unoise3.txt
+
+# Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
+usearch -search_exact $DATA/unoise/amplicons.fa \
+	-db $DATA/unoise/zotus.fa \
+	-strand plus \
+	-notmatched $DATA/unoise/chimeras.fa
 
 # Use the generated OTUs to create an OTU table
 usearch -otutab $DATA/clean/pooled_merged.fastq \
