@@ -43,9 +43,15 @@ usearch -fastq_filter $DATA/uparse/unmapped_reads.fastq \
 # Get sequences that are predicted to be chimeras
 usearch -unoise3 $DATA/clean/pooled_uniques.fastq \
 	-zotus $DATA/uparse/zotus.fa \
-	-tabbedout $DATA/uparse/unoise3.txt \
-	-chimeras $DATA/uparse/chimeras.fa
+	-ampout $DATA/uparse/amplicons.fa \
+	-tabbedout $DATA/uparse/unoise3.txt
 
+# Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
+usearch -search_exact $DATA/uparse/amplicons.fa \
+	-db $DATA/uparse/zotus.fa \
+	-strand plus \
+	-notmatched $DATA/uparse/chimeras.fa 
+	
 # Combine predicted OTUs and chimeras into a single database
 cat $DATA/uparse/otus.fa $DATA/uparse/chimeras.fa \
     > $DATA/uparse/otus_chimeras.fa
