@@ -26,12 +26,16 @@ DATA=~/projects/thesis/data
 # First merge forward and reverse reads from each sample, and pool the merged reads
 usearch -fastq_mergepairs $DATA/truncated/*R1.fastq \
 	-fastqout $DATA/clean/pooled_merged.fastq \
+	-relabel @ \
 	-fastq_maxdiffs 100 \
 	-fastq_pctid 50 \
-	-fastq_minmergelen 215 \
-	-fastq_maxmergelen 235 \
-	-relabel @ \
+	-fastq_minmergelen 220 \
+	-fastq_maxmergelen 225 \
         -report $DATA/reports/merge_report.txt
+
+# Create a report with summary stats on the merged reads
+usearch -fastx_info $DATA/clean/pooled_merged.fastq \
+	-output $DATA/reports/merged_info.txt
 
 # Create a report of the expected errors of the merged reads
 usearch -fastq_eestats2 $DATA/clean/pooled_merged.fastq \
@@ -44,3 +48,6 @@ usearch -fastq_filter $DATA/clean/pooled_merged.fastq \
 	-fastqout $DATA/clean/pooled_filtered.fastq \
 	-fastq_maxee 2.0
 
+# Create a report with summary stats on the filtered reads
+usearch -fastx_info $DATA/clean/pooled_filtered.fastq \
+	-output $DATA/reports/filtered_info.txt
