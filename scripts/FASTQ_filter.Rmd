@@ -50,16 +50,16 @@ qual_path <- file.path(raw_path, "quality")
 if (!file_test("-d", qual_path)) dir.create(qual_path)
 
 #plot quality
-for (fq in fastqs){
-  plotQualityProfile(file.path(raw_path, fq)) + 
-  scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
-  scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-  theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
-  ggtitle(str_replace(fq, ".fastq", ""))
-  
-  fname <- str_replace(fq, "fastq", "png")
-  ggsave(file.path(qual_path, fname), width = 10, height = 7)
-}
+# for (fq in fastqs){
+#   plotQualityProfile(file.path(raw_path, fq)) + 
+#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+#   theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
+#   ggtitle(str_replace(fq, ".fastq", ""))
+#   
+#   fname <- str_replace(fq, "fastq", "png")
+#   ggsave(file.path(qual_path, fname), width = 10, height = 7)
+# }
 
 # plotQualityProfile(file.path("raw", fastq_Fs[10])) + 
 #   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
@@ -88,7 +88,7 @@ trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
 # Truncate and filter paired read sets
 for (i in seq_along(fastq_Fs)){
   fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(trunc_path, c(trunc_Fs[i], trunc_Rs[i])), 
-                    truncLen = c(230, 210), trimLeft = 10,
+                    truncLen = c(230, 210), trimLeft = c(10, 10),
                     maxN = Inf, maxEE = c(Inf, Inf), truncQ = 2, rm.phix = TRUE,
                     compress = FALSE, verbose = TRUE)
 }
