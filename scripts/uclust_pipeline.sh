@@ -7,25 +7,7 @@
 
 DATA=~/projects/thesis/data
 
-# First merge forward and reverse reads from each sample, and pool the merged reads
-usearch -fastq_mergepairs $DATA/raw/*R1.fastq \
-        -fastqout $DATA/clean/pooled_merged.fastq \
-	-fastq_maxdiffs 100 \
-        -fastq_pctid 50 \
-        -fastq_minmergelen 245 \
-        -fastq_maxmergelen 255 \
-	-relabel @ \
-        -report $DATA/reports/merge_report.txt
-
-# Create report of the expected errors of the merged reads
-usearch -fastq_eestats2 $DATA/clean/pooled_merged.fastq \
-        -output $DATA/reports/merged_eestats.txt \
-	-length_cutoffs 200,*,10 \
-
-# Quality filter the reads using a maximum of 2.0 expected errors
-usearch -fastq_filter $DATA/clean/pooled_merged.fastq \
-        -fastqout $DATA/clean/pooled_filtered.fastq \
-	-fastq_maxee 2.0
+printf "\nReformatting read sequences to QIIME format...\n"
 
 # Reformat sequence files to QIIME format
 usearch -fastq_filter $DATA/clean/pooled_filtered.fastq \
@@ -34,28 +16,29 @@ usearch -fastq_filter $DATA/clean/pooled_filtered.fastq \
 
 ### The rest of the pipeline is executed with QIIME scripts
 
+printf "\nIdentifying chimeric sequences...\n"
+
 # Identify chimeric sequences 
 identify_chimeric_seqs.py -m usearch61 \
         -i $DATA/clean/pooled_filtered.fasta \
-        -r $DATA/references/gold.fa \
-        -o $DATA/uchime/
+        -r $DATA/reference/gold.fa \
+        -o $DATA/uclust/
+
+printf "\nRemoving chimeric sequences from sample reads...\n"
 
 # Filter out identified chimeric sequences
 filter_fasta.py -f $DATA/clean/pooled_filtered.fasta \
-        -o $DATA/clean/pooled_nochim.fa \
-        -s $DATA/uchime/chimeras.txt \
+        -o $DATA/uclust/pooled_nochim.fa \
+        -s $DATA/uclust/chimeras.txt \
         -n 
 
+printf "\nPicking OTUs (de novo) and representative seqeunces, assigning"
+printf "taxonomy, performing multiple alignments, and building a"
+printf "phylogenetic tree..."
+
 # Pick de novo OTUs
-# I need to investigate the parameters that this QIIME script passes to UCLUST. Are sequences sorted by size?
-pick_de_novo_otus.py -i $DATA/clean/pooled_nochim.fa \
+# I need to investigate the parameters that this QIIME script passes to UCLUST.
+# Are sequences sorted by size?
+pick_de_novo_otus.py -i $DATA/uclust/pooled_nochim.fa \
         -o $DATA/uclust/ \
         -f
-
-# Dereplicate 
-# usearch -fastx_uniques clean/all_filtered.fastq -fastqout clean/all_uniques.fastq \
-#	-sizeout -relabel Uniq
-
-# usearch -cluster_fast clean/s160_MC_Neat_filtered.fastq -id 0.97 \
-#	-centroids clustered/centroids.fasta -uc clustered/clusters.uc \
-#	-sort size -maxaccepts 1 -maxrejects 80
