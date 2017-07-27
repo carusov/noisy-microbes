@@ -46,7 +46,7 @@ fastq_Rs <- str_subset(fastqs, "_R2")
 #get the sample names
 sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
 
-qual_path <- file.path(data_path, "quality")
+qual_path <- file.path(raw_path, "quality")
 if (!file_test("-d", qual_path)) dir.create(qual_path)
 
 #plot quality
@@ -88,7 +88,7 @@ trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
 # Truncate and filter paired read sets
 for (i in seq_along(fastq_Fs)){
   fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(trunc_path, c(trunc_Fs[i], trunc_Rs[i])), 
-                    truncLen = c(230, 210), trimLeft = 15,
+                    truncLen = c(230, 210), trimLeft = 10,
                     maxN = Inf, maxEE = c(Inf, Inf), truncQ = 2, rm.phix = TRUE,
                     compress = FALSE, verbose = TRUE)
 }
