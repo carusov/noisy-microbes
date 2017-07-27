@@ -31,14 +31,14 @@ ref_path <- file.path(data_path, "reference")
 dada2_path <- file.path(data_path, "dada2")
 setwd(data_path)
 
-#map_file <- file.path(path, "map.txt")
-file_names <- list.files(raw_path)
+load(file.path(dada2_path, "dadas.RData"))
 
 ```
 
 The file names are really long and contain redundant information, so I'll rename them to remove the unnecessary bits.
 ```{r rename files}
 
+file_names <- list.files(raw_path)
 fastqs <- str_subset(file_names, ".fastq$")
 
 # rename files in MockCommunities folder
@@ -93,7 +93,7 @@ filt_Rs <- paste0(sample_names, "_R_filt.fastq")
 #Filter paired read sets
 for (i in seq_along(fastq_Fs)){
   fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(filt_path, c(filt_Fs[i], filt_Rs[i])), 
-                    truncLen = c(230, 210), trimLeft = c(15,15),
+                    truncLen = c(230, 210), trimLeft = c(10,10),
                     maxN = 0, maxEE = c(3,4), truncQ = 2, rm.phix = TRUE,
                     compress = FALSE, verbose = TRUE)
 }
