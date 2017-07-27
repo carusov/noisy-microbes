@@ -9,7 +9,7 @@
 
 DATA=~/projects/thesis/data
 
-# Dereplicate the reads
+# Dereplicate the quality-filtered reads
 usearch -fastx_uniques $DATA/clean/pooled_filtered.fastq \
 	-fastqout $DATA/clean/pooled_uniques.fastq \
 	-sizeout \
