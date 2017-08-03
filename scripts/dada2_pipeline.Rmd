@@ -31,15 +31,15 @@ ref_path <- file.path(data_path, "reference")
 dada2_path <- file.path(data_path, "dada2")
 setwd(data_path)
 
-load(file.path(dada2_path, "dadas.RData"))
+#load(file.path(dada2_path, "dadas.RData"))
 
 ```
 
 The file names are really long and contain redundant information, so I'll rename them to remove the unnecessary bits.
 ```{r rename files}
 
-file_names <- list.files(raw_path)
-fastqs <- str_subset(file_names, ".fastq$")
+# file_names <- list.files(raw_path)
+# fastqs <- str_subset(file_names, ".fastq$")
 
 # rename files in MockCommunities folder
 
@@ -60,6 +60,7 @@ fastqs <- str_subset(file_names, ".fastq$")
 First, I want to look at the quality profiles of forward and reverse reads separately.
 ```{r plot qualities}
 
+file_names <- list.files(raw_path)
 fastqs <- str_subset(file_names, ".fastq$")
 fastq_Fs <- str_subset(fastqs, "_R1")
 fastq_Rs <- str_subset(fastqs, "_R2")
@@ -82,7 +83,7 @@ plotQualityProfile(file.path(raw_path, fastq_Rs[1])) +
 
 ```
 
-The quality isn't great for most of the read sets. For the "Neat" sample, I'll trim the forward reads at position 230 for now, and the reverse reads at position 210. I'm also trimming the first 15 nucleotides-- the Illumina "burn-in".
+The quality isn't great for most of the read sets. For the "Neat" sample, I'll trim the forward reads at position 230 for now, and the reverse reads at position 210. I'm also trimming the first 10 nucleotides-- the Illumina "burn-in".
 ```{r filter}
 
 #Set up a directory and file names for the filtered reads
@@ -178,12 +179,11 @@ table(nchar(getSequences(sv_table)))
 
 ```
 
-There are a few sequences (3) with lengths outside the expected range for the V4 region, so I'm going to remove those.
-**Revision:** Sequences outside the length range below have been filtered out by the `fastq_mergepairs` command in USEARCH, so the code below is not needed at this point. Do I want to make the merging less restrictive, potentially allowing a greater range of sequence lengths?
+If there are any sequences with lengths outside the expected range for the V4 region, I want to remove those.
 ```{r remove bad lengths}
 
-# min_len <- 220
-# max_len <- 225
+# min_len <- 230
+# max_len <- 235
 # sv_table.good <- sv_table[, nchar(getSequences(sv_table)) %in% seq(min_len, max_len)]
 # 
 # table(nchar(getSequences(sv_table.253)))
@@ -215,6 +215,9 @@ rowSums(sv_table.no_chim > 0)
 taxa <- assignTaxonomy(sv_table.no_chim, file.path(ref_path, "silva_nr_v123_train_set.fa.gz"))
 genus.species <- assignSpecies(sv_table.no_chim, file.path(ref_path, "silva_species_assignment_v123.fa.gz"))
 
+# save tables
+save(merged, sv_table, sv_table.no_chim, taxa, genus.species, file = file.path(dada2_path, "tables.RData"))
+
 ```
 
 
@@ -224,11 +227,11 @@ genus.species <- assignSpecies(sv_table.no_chim, file.path(ref_path, "silva_spec
 
 #ref_path <- "C:/Users/vinny/Box Sync/OHSU/Research/Thesis project/Projects/Miseq316/ZymoBIOMICS.STD.genomes.ZR160406/BioPool_genomes/16S-18S"
 
-ref_names <- list.files(ref_path)
-
-ref_seqs <- list(0)
-for (i in seq_along(ref_names)){
-  ref_seqs[[i]] <- readFasta(file.path(ref_path, ref_names[i]))
-}
+# ref_names <- list.files(ref_path)
+# 
+# ref_seqs <- list(0)
+# for (i in seq_along(ref_names)){
+#   ref_seqs[[i]] <- readFasta(file.path(ref_path, ref_names[i]))
+# }
 
 ```
