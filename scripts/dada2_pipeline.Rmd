@@ -25,10 +25,11 @@ Next, set the working directory and file paths.
 ```{r paths}
 
 data_path <- "~/projects/thesis/data"
+result_path <- "~/projects/thesis/results"
 raw_path <- file.path(data_path, "raw")
 filt_path <- file.path(data_path, "filtered")
 ref_path <- file.path(data_path, "reference")
-dada2_path <- file.path(data_path, "dada2")
+dada2_path <- file.path(result_path, "dada2")
 setwd(data_path)
 
 #load(file.path(dada2_path, "dadas.RData"))
@@ -148,7 +149,7 @@ dada_Fs[[10]]
 dada_Rs[[10]]
 
 # Save the dada objects
-save(derep_Fs, derep_Rs, dada_Fs.lrn, dada_Rs.lrn, dada_Fs, dada_Rs, file = file.path(dada2_path, "dadas.RData"))
+save(derep_Fs, derep_Rs, dada_Fs.lrn, dada_Rs.lrn, dada_Fs, dada_Rs, file = file.path(dada2_path, "dada2.RData"))
 
 ```
 
