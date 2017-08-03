@@ -8,6 +8,11 @@
 ### filtered sample reads
 
 DATA=~/projects/thesis/data
+RESULTS=~/projects/thesis/results
+
+if [ ! -d "$RESULTS/unoise" ]; then
+    mkdir $RESULTS/unoise
+fi
 
 # Dereplicate the reads
 usearch -fastx_uniques $DATA/clean/pooled_filtered.fastq \
@@ -17,50 +22,50 @@ usearch -fastx_uniques $DATA/clean/pooled_filtered.fastq \
 
 # Now denoise the reads into ZOTUs using the UNOISE2 algorithm
 usearch -unoise3 $DATA/clean/pooled_uniques.fastq \
-	-zotus $DATA/unoise/zotus.fa \
-	-ampout $DATA/unoise/amplicons.fa \
-	-tabbedout $DATA/unoise/unoise3.txt
+	-zotus $RESULTS/unoise/zotus.fa \
+	-ampout $RESULTS/unoise/amplicons.fa \
+	-tabbedout $RESULTS/unoise/unoise3.txt
 
 # Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
-usearch -search_exact $DATA/unoise/amplicons.fa \
-	-db $DATA/unoise/zotus.fa \
+usearch -search_exact $RESULTS/unoise/amplicons.fa \
+	-db $RESULTS/unoise/zotus.fa \
 	-strand plus \
-	-notmatched $DATA/unoise/chimeras.fa
+	-notmatched $RESULTS/unoise/chimeras.fa
 
 # Use the generated OTUs to create an OTU table
 usearch -otutab $DATA/clean/pooled_merged.fastq \
-	-otus $DATA/unoise/zotus.fa \
-	-otutabout $DATA/unoise/zotu_table.txt \
-	-biomout $DATA/unoise/zotu_table.biom \
-	-mapout $DATA/unoise/map.txt \
-	-dbmatched $DATA/unoise/zotus_with_sizes.fa \
-	-notmatchedfq $DATA/unoise/unmapped_reads.fastq \
+	-otus $RESULTS/unoise/zotus.fa \
+	-otutabout $RESULTS/unoise/zotu_table.txt \
+	-biomout $RESULTS/unoise/zotu_table.biom \
+	-mapout $RESULTS/unoise/map.txt \
+	-dbmatched $RESULTS/unoise/zotus_with_sizes.fa \
+	-notmatchedfq $RESULTS/unoise/unmapped_reads.fastq \
 	-sizeout
 
 # Find out how many reads didn't map to OTUs
-usearch -fastx_info $DATA/unoise/unmapped_reads.fastq \
-	-output $DATA/unoise/unmapped_reads_info.txt
+usearch -fastx_info $RESULTS/unoise/unmapped_reads.fastq \
+	-output $RESULTS/unoise/unmapped_reads_info.txt
 
 # How many "hiqh quality" reads don't map to OTUS?
-usearch -fastq_filter $DATA/unoise/unmapped_reads.fastq \
+usearch -fastq_filter $RESULTS/unoise/unmapped_reads.fastq \
 	-fastq_maxee 2.0 \
-	-fastaout $DATA/unoise/unmapped_hiqual.fa \
-	-fastaout_discarded $DATA/unoise/unmapped_loqual.fa
+	-fastaout $RESULTS/unoise/unmapped_hiqual.fa \
+	-fastaout_discarded $RESULTS/unoise/unmapped_loqual.fa
 
 # Combine predicted OTUs and chimeras into a single database
-cat $DATA/unoise/zotus.fa $DATA/unoise/chimeras.fa \
-    > $DATA/unoise/otus_chimeras.fa
+cat $RESULTS/unoise/zotus.fa $RESULTS/unoise/chimeras.fa \
+    > $RESULTS/unoise/otus_chimeras.fa
 
 # Now, see how many high-quality, unmapped sequences are within 5% of an OTU or chimeric sequence
-usearch -usearch_global $DATA/unoise/unmapped_hiqual.fa \
-	-db otus_chimeras.fa \
+usearch -usearch_global $RESULTS/unoise/unmapped_hiqual.fa \
+	-db $RESULTS/unoise/otus_chimeras.fa \
 	-strand plus \
 	-id 0.95 \
-	-matched $DATA/unoise/unmatched_noisy.fa \
-	-notmatched $DATA/unoise/unmatched_hiqual_other.fa
+	-matched $RESULTS/unoise/unmatched_noisy.fa \
+	-notmatched $RESULTS/unoise/unmatched_hiqual_other.fa
 
 # Final coverage check: see if any leftover high-quality reads map to a large database
-#usearch -usearch_global $DATA/unoise/unmatched_hiqual_other.fa \
+#usearch -usearch_global $RESULTS/unoise/unmatched_hiqual_other.fa \
 #	-db silva.udb \
 #	-strand both \
 #	-idd 0.99 \
