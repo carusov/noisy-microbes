@@ -66,6 +66,8 @@ done
 #         -hitsout lowc.fastq
 
 ### Also, was there any PhiX spike-in used in sequencing that might not have been completely removed?
+### Answer: Any remaining PhiX reads are removed by 'fastqPairedFilter' in DADA2,
+### at the same time that the reads are trimmed.
 
 ### And were the primer sequences removed before we received the "raw" data? They don't seem to be
 ### present in the reads.
@@ -92,9 +94,10 @@ usearch -fastq_eestats2 $DATA/merged/pooled_merged.fastq \
 ### Quality filter the reads using a maximum of 2.0 expected errors
 usearch -fastq_filter $DATA/merged/pooled_merged.fastq \
 	-fastqout $DATA/clean/pooled_filtered.fastq \
+	-fastaout $DATA/clean/pooled_filtered.fasta \
 	-fastq_maxee $maxee \
 	-fastq_maxns $maxns
 
 ### Create a report with summary stats on the filtered reads
 usearch -fastx_info $DATA/clean/pooled_filtered.fastq \
-	-output $DATA/reports/filtered_info.txt
+	-output $DATA/reports/pooled_filtered_info.txt
