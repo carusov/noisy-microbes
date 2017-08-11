@@ -7,49 +7,113 @@
 ### the USEARCH software to perform merging and filtering.
 ### (see www.drive5.com/usearch for detailed documentation)
 
-DATA=~/projects/thesis/data
+# Set the default input and output directories
+#DATA=~/projects/thesis/data
+INDIR=./
+OUTDIR=./
 
-### Merge parameters
-maxdiffs=30
-pctid=50
-minmergelen=230
-maxmergelen=235
+# Set the default merge parameters
+MAXDIFFS=30
+PCTID=50
+MINMERGELEN=230
+MAXMERGELEN=250
 
-### Filter parameters
-maxee=2.0
-maxns=0
+# Set the default filter parameters
+MAXEE=2.0
+MAXNS=0
 
-### Merge reads from individual samples to get stats for publication
-for fq in $(ls $DATA/truncated/*R1.fastq)
+# Parse command-line options
+while [[ $# -gt 0 ]]
 do
-    bn=$(basename $fq _trunc_R1.fastq)
-    nn=$bn"_merged.fastq"
-    usearch -fastq_mergepairs $fq \
-	    -fastqout $DATA/merged/$nn \
-	    -relabel @ \
-	    -fastq_maxdiffs $maxdiffs \
-	    -fastq_pctid $pctid \
-	    -fastq_minmergelen $minmergelen \
-	    -fastq_maxmergelen $maxmergelen \
-	    -report $DATA/reports/$bn"_merge_report.txt"
+    key="$1"
 
-    usearch -fastx_info $DATA/merged/$nn \
-	    -output $DATA/reports/$bn"_merged_info.txt"
+    case $key in
+	-i|--input)
+	    INDIR="$2"
+	    shift;;
+	-o|--output)
+	    OUTDIR="$2"
+	    shift;;
+	-m|--maxdiffs)
+	    MAXDIFFS="$2"
+	    shift;;
+	-p|--pctid)
+	    PCTID="$2"
+	    shift;;
+	-s|--shortest)
+	    MINMERGELEN="$2"
+	    shift;;
+	-l|--longest)
+	    MAXMERGELEN="$2"
+	    shift;;
+	-e|--maxee)
+	    MAXEE="$2"
+	    shift;;
+	-n|--maxns)
+	    MAXNS="$2"
+	    shift;;
+	-h|--help)
+	    printf "USAGE: merge_and_filter -i input_directory -o output_directory [OPTIONS]\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
 done
 
-### Now filter the individual samples too, in case we need stats on the output of filtering
-# for fq in $(ls $DATA/clean/ | grep -E "s[0-9]{3}.+_merged.fastq")
-for fq in $(ls $DATA/merged/s1*_merged.fastq)   # I was editing this line when I closed out last time
+echo INPUT DIRECTORY = "${INDIR}"
+echo OUTPUT DIRECTORY = "${OUTDIR}"
+
+# Create the 'merged' directory, if necessary
+if [ ! -e $OUTDIR/merged ]; then
+    mkdir $OUTDIR/merged
+fi
+
+# Create the 'filtered' directory, if necessary
+if [ ! -e $OUTDIR/filtered ]; then
+    mkdir $OUTDIR/filtered
+fi
+
+# Create the 'reports' directory, if necessary
+if [ ! -e $OUTDIR/reports ]; then
+    mkdir $OUTDIR/reports
+fi
+
+### Merge reads from individual samples to get stats for publication
+for fq in $(ls $INDIR/*R1.fastq)
+do
+    bn=$(basename $fq)
+    printf "********************\n"
+    printf $bn"\n"
+    bn=${bn%%_*.fastq}
+    printf $bn"\n"
+    nn=$bn"_merged.fastq"
+    usearch -fastq_mergepairs $fq \
+	    -fastqout $OUTDIR/merged/$nn \
+	    -relabel @ \
+	    -fastq_maxdiffs $MAXDIFFS \
+	    -fastq_pctid $PCTID \
+	    -fastq_minmergelen $MINMERGELEN \
+	    -fastq_maxmergelen $MAXMERGELEN \
+	    -report $OUTDIR/reports/$bn"_merge_report.txt"
+
+    usearch -fastx_info $OUTDIR/merged/$nn \
+	    -output $OUTDIR/reports/$bn"_merged_info.txt"
+done
+
+# Now filter the individual samples too, in case we need stats on the output of filtering
+for fq in $(ls $OUTDIR/merged/s1*_merged.fastq)  
 do
     bn=$(basename $fq _merged.fastq)
     nn=$bn"_filtered.fastq"
     usearch -fastq_filter $fq \
-	    -fastqout $DATA/clean/$nn \
-	    -fastq_maxee $maxee \
-	    -fastq_maxns $maxns
+	    -fastqout $OUTDIR/filtered/$nn \
+	    -fastq_maxee $MAXEE \
+	    -fastq_maxns $MAXNS
     
-    usearch -fastx_info $DATA/clean/$nn \
-	    -output $DATA/reports/$bn"_filtered_info.txt"
+    usearch -fastx_info $OUTDIR/filtered/$nn \
+	    -output $OUTDIR/reports/$bn"_filtered_info.txt"
 done
 
 ################################################################################
@@ -73,31 +137,31 @@ done
 ### present in the reads.
 
 ### First merge forward and reverse reads from each sample, and pool the merged reads
-usearch -fastq_mergepairs $DATA/truncated/*R1.fastq \
-	-fastqout $DATA/merged/pooled_merged.fastq \
+usearch -fastq_mergepairs $INDIR/*R1.fastq \
+	-fastqout $OUTDIR/merged/pooled_merged.fastq \
 	-relabel @ \
-	-fastq_maxdiffs $maxdiffs \
-	-fastq_pctid $pctid \
-	-fastq_minmergelen $minmergelen \
-	-fastq_maxmergelen $maxmergelen \
-        -report $DATA/reports/pooled_merge_report.txt
+	-fastq_maxdiffs $MAXDIFFS \
+	-fastq_pctid $PCTID \
+	-fastq_minmergelen $MINMERGELEN \
+	-fastq_maxmergelen $MAXMERGELEN \
+        -report $OUTDIR/reports/pooled_merge_report.txt
 
 ### Create a report with summary stats on the merged reads
-usearch -fastx_info $DATA/merged/pooled_merged.fastq \
-	-output $DATA/reports/pooled_merged_info.txt
+usearch -fastx_info $OUTDIR/merged/pooled_merged.fastq \
+	-output $OUTDIR/reports/pooled_merged_info.txt
 
 ### Create a report of the expected errors of the merged reads
-usearch -fastq_eestats2 $DATA/merged/pooled_merged.fastq \
-	-output $DATA/reports/pooled_merged_eestats.txt \
+usearch -fastq_eestats2 $OUTDIR/merged/pooled_merged.fastq \
+	-output $OUTDIR/reports/pooled_merged_eestats.txt \
 	-length_cutoffs 200,*,10
 
 ### Quality filter the reads using a maximum of 2.0 expected errors
-usearch -fastq_filter $DATA/merged/pooled_merged.fastq \
-	-fastqout $DATA/clean/pooled_filtered.fastq \
-	-fastaout $DATA/clean/pooled_filtered.fasta \
-	-fastq_maxee $maxee \
-	-fastq_maxns $maxns
+usearch -fastq_filter $OUTDIR/merged/pooled_merged.fastq \
+	-fastqout $OUTDIR/filtered/pooled_filtered.fastq \
+	-fastaout $OUTDIR/filtered/pooled_filtered.fasta \
+	-fastq_maxee $MAXEE \
+	-fastq_maxns $MAXNS
 
 ### Create a report with summary stats on the filtered reads
-usearch -fastx_info $DATA/clean/pooled_filtered.fastq \
-	-output $DATA/reports/pooled_filtered_info.txt
+usearch -fastx_info $OUTDIR/filtered/pooled_filtered.fastq \
+	-output $OUTDIR/reports/pooled_filtered_info.txt
