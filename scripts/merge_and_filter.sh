@@ -8,15 +8,14 @@
 ### (see www.drive5.com/usearch for detailed documentation)
 
 # Set the default input and output directories
-#DATA=~/projects/thesis/data
-INDIR=./
-OUTDIR=./
+INDIR=~/projects/thesis/data/truncated
+OUTDIR=~/projects/thesis/data
 
 # Set the default merge parameters
 MAXDIFFS=30
 PCTID=50
 MINMERGELEN=230
-MAXMERGELEN=250
+MAXMERGELEN=235
 
 # Set the default filter parameters
 MAXEE=2.0
@@ -62,37 +61,37 @@ do
     shift
 done
 
-echo INPUT DIRECTORY = "${INDIR}"
-echo OUTPUT DIRECTORY = "${OUTDIR}"
+printf "\nINPUT DIRECTORY = ""${INDIR}""\n"
+printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
 
 # Create the output directory, if necessary
-if [ ! -e $OUTDIR ]; then
+if [ ! -d $OUTDIR ]; then
     mkdir $OUTDIR
 fi
 
 # Create the 'merged' directory, if necessary
-if [ ! -e $OUTDIR/merged ]; then
+if [ ! -d $OUTDIR/merged ]; then
     mkdir $OUTDIR/merged
 else
     rm $OUTDIR/merged/*.fastq
 fi
 
 # Create the 'filtered' directory, if necessary
-if [ ! -e $OUTDIR/filtered ]; then
+if [ ! -d $OUTDIR/filtered ]; then
     mkdir $OUTDIR/filtered
 else
     rm $OUTDIR/filtered/*.fastq
 fi
 
 # Create the 'reports' directory, if necessary
-if [ ! -e $OUTDIR/reports ]; then
+if [ ! -d $OUTDIR/reports ]; then
     mkdir $OUTDIR/reports
 else
     rm $OUTDIR/reports/*.txt
 fi
 
 ### Merge reads from individual samples to get stats for publication
-for fq in $(ls $INDIR/*R1.fastq)
+for fq in $(ls $INDIR/*_R1.fastq)
 do
     bn=$(basename $fq)
     printf "********************\n"
