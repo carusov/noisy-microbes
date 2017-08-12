@@ -7,70 +7,101 @@
 ### The input to the script is a .fastq file of merged, pooled, and quality-
 ### filtered sample reads
 
-DATA=~/projects/thesis/data
-RESULTS=~/projects/thesis/results
+# Set the default input file, output directory, and raw merged read file
+INFILE=~/projects/thesis/data/filtered/pooled_filtered.fastq
+OUTDIR=~/projects/thesis/results/uparse
+RAW_MERGED_FILE=~/projects/thesis/data/merged/pooled_merged.fastq
 
-if [ ! -d "$RESULTS/uparse" ]; then
-    mkdir $RESULTS/uparse
+# Parse command-line options
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+	-i|--input)
+	    INFILE="$2"
+	    shift;;
+	-o|--output)
+	    OUTDIR="$2"
+	    shift;;
+	-r|--raw-merged)
+	    RAW_MERGED_FILE="$2"
+	    shift;;
+	-h|--help)
+	    printf "\nUSAGE: uparse_pipeline.sh -i input_file -o output_directory -r raw_merged_reads_file\n\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
+done
+
+printf "\nINPUT FILE = ""${INFILE}""\n"
+printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
+
+# Create the output directory, if necessary
+if [ ! -d "$OUTDIR" ]; then
+    mkdir $OUTDIR
 fi
 
 # Dereplicate the quality-filtered reads
-usearch -fastx_uniques $DATA/clean/pooled_filtered.fastq \
-	-fastqout $DATA/clean/pooled_uniques.fastq \
+usearch -fastx_uniques $INFILE \
+	-fastqout $OUTDIR/pooled_uniques.fastq \
 	-sizeout \
 	-relabel Uniq
 
 # Now cluster the reads into OTUs using the UPARSE algorithm
-usearch -cluster_otus $DATA/clean/pooled_uniques.fastq \
-	-otus $RESULTS/uparse/otus.fa \
+usearch -cluster_otus $OUTDIR/pooled_uniques.fastq \
+	-otus $OUTDIR/otus.fa \
 	-relabel OTU
 
 # Use the generated OTUs to create an OTU table
-usearch -otutab $DATA/clean/pooled_merged.fastq \
-	-otus $RESULTS/uparse/otus.fa \
-	-otutabout $RESULTS/uparse/otu_table.txt \
-	-biomout $RESULTS/uparse/otu_table.biom \
-	-mapout $RESULTS/uparse/map.txt \
-	-dbmatched $RESULTS/uparse/otus_with_sizes.fa \
-	-notmatchedfq $RESULTS/uparse/unmapped_reads.fastq \
+usearch -otutab $RAW_MERGED_FILE \
+	-otus $OUTDIR/otus.fa \
+	-otutabout $OUTDIR/otu_table.txt \
+	-biomout $OUTDIR/otu_table.biom \
+	-mapout $OUTDIR/map.txt \
+	-dbmatched $OUTDIR/otus_with_sizes.fa \
+	-notmatchedfq $OUTDIR/unmapped_reads.fastq \
 	-sizeout
 
 # Find out how many reads didn't map to OTUs
-usearch -fastx_info $RESULTS/uparse/unmapped_reads.fastq \
-	-output $RESULTS/uparse/unmapped_reads_info.txt
+usearch -fastx_info $OUTDIR/unmapped_reads.fastq \
+	-output $OUTDIR/unmapped_reads_info.txt
 
 # How many "hiqh quality" reads don't map to OTUS?
-usearch -fastq_filter $RESULTS/uparse/unmapped_reads.fastq \
+usearch -fastq_filter $OUTDIR/unmapped_reads.fastq \
 	-fastq_maxee 2.0 \
-	-fastaout $RESULTS/uparse/unmapped_hiqual.fa \
-	-fastaout_discarded $RESULTS/uparse/unmapped_loqual.fa
+	-fastaout $OUTDIR/unmapped_hiqual.fa \
+	-fastaout_discarded $OUTDIR/unmapped_loqual.fa
 
 # Get sequences that are predicted to be chimeras
-usearch -unoise3 $DATA/clean/pooled_uniques.fastq \
-	-zotus $RESULTS/uparse/zotus.fa \
-	-ampout $RESULTS/uparse/amplicons.fa \
-	-tabbedout $RESULTS/uparse/unoise3.txt
+usearch -unoise3 $OUTDIR/pooled_uniques.fastq \
+	-zotus $OUTDIR/zotus.fa \
+	-ampout $OUTDIR/amplicons.fa \
+	-tabbedout $OUTDIR/unoise3.txt
 
 # Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
-usearch -search_exact $RESULTS/uparse/amplicons.fa \
-	-db $RESULTS/uparse/zotus.fa \
+usearch -search_exact $OUTDIR/amplicons.fa \
+	-db $OUTDIR/zotus.fa \
 	-strand plus \
-	-notmatched $RESULTS/uparse/chimeras.fa 
+	-notmatched $OUTDIR/chimeras.fa 
 	
 # Combine predicted OTUs and chimeras into a single database
-cat $RESULTS/uparse/otus.fa $RESULTS/uparse/chimeras.fa \
-    > $RESULTS/uparse/otus_chimeras.fa
+cat $OUTDIR/otus.fa $OUTDIR/chimeras.fa \
+    > $OUTDIR/otus_chimeras.fa
 
 # Now, see how many high-quality, unmapped sequences are within 5% of an OTU or chimeric sequence
-usearch -usearch_global $RESULTS/uparse/unmapped_hiqual.fa \
-	-db $RESULTS/uparse/otus_chimeras.fa \
+usearch -usearch_global $OUTDIR/unmapped_hiqual.fa \
+	-db $OUTDIR/otus_chimeras.fa \
 	-strand plus \
 	-id 0.95 \
-	-matched $RESULTS/uparse/unmatched_noisy.fa \
-	-notmatched $RESULTS/uparse/unmatched_hiqual_other.fa
+	-matched $OUTDIR/unmatched_noisy.fa \
+	-notmatched $OUTDIR/unmatched_hiqual_other.fa
 
 # Final coverage check: see if any leftover high-quality reads map to a large database
-#usearch -usearch_global $RESULTS/uparse/unmatched_hiqual_other.fa \
+#usearch -usearch_global $OUTDIR/unmatched_hiqual_other.fa \
 #	-db silva.udb \
 #	-strand both \
 #	-idd 0.99 \
