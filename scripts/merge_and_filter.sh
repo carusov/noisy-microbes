@@ -65,19 +65,30 @@ done
 echo INPUT DIRECTORY = "${INDIR}"
 echo OUTPUT DIRECTORY = "${OUTDIR}"
 
+# Create the output directory, if necessary
+if [ ! -e $OUTDIR ]; then
+    mkdir $OUTDIR
+fi
+
 # Create the 'merged' directory, if necessary
 if [ ! -e $OUTDIR/merged ]; then
     mkdir $OUTDIR/merged
+else
+    rm $OUTDIR/merged/*.fastq
 fi
 
 # Create the 'filtered' directory, if necessary
 if [ ! -e $OUTDIR/filtered ]; then
     mkdir $OUTDIR/filtered
+else
+    rm $OUTDIR/filtered/*.fastq
 fi
 
 # Create the 'reports' directory, if necessary
 if [ ! -e $OUTDIR/reports ]; then
     mkdir $OUTDIR/reports
+else
+    rm $OUTDIR/reports/*.txt
 fi
 
 ### Merge reads from individual samples to get stats for publication
@@ -103,7 +114,7 @@ do
 done
 
 # Now filter the individual samples too, in case we need stats on the output of filtering
-for fq in $(ls $OUTDIR/merged/s1*_merged.fastq)  
+for fq in $(ls $OUTDIR/merged/*_merged.fastq)  
 do
     bn=$(basename $fq _merged.fastq)
     nn=$bn"_filtered.fastq"
