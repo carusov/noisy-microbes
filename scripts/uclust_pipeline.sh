@@ -5,40 +5,67 @@
 ### This script implements the UCLUST pipeline through the QIIME SOP
 ### (see www.qiime.org for detailed documentation)
 
-DATA=~/projects/thesis/data
-RESULTS=~/projects/thesis/results
+# Set the default input file and output directory
+#DATA=~/projects/thesis/data
+INFILE=~/projects/thesis/data/filtered/pooled_filtered.fasta
+OUTDIR=~/projects/thesis/results/uclust
+REF=~/projects/thesis/data/references/gold.fa
+
+# Parse command-line options
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+	-i|--input)
+	    INFILE="$2"
+	    shift;;
+	-o|--output)
+	    OUTDIR="$2"
+	    shift;;
+	-r|--reference)
+	    REF="$2"
+	    shift;;
+	-h|--help)
+	    printf "\nUSAGE: uclust_pipeline.sh -i input_file -o output_directory -r 16S_reference_db.fasta\n\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
+done
+
+echo INPUT FILE = "${INFILE}"
+echo OUTPUT DIRECTORY = "${OUTDIR}"
+
+# Create the output directory, if necessary
+if [ ! -d "$OUTDIR" ]; then
+    mkdir $OUTDIR
+fi
 
 # Activate the qiime environment in miniconda
 source activate qiime1
 
-# Convert .fastq to .fasta for use with QIIME
-printf "\nGenerating .fasta file from .fastq file\n"
-usearch -fastq_filter $DATA/clean/pooled_filtered.fastq \
-        -fastaout $DATA/clean/pooled_filtered.fasta
-
 # Reformat sequence files to QIIME format
 printf "\nReformatting read sequences to QIIME format...\n"
-sed '/^>/ s/\./_/' $DATA/clean/pooled_filtered.fasta \
-    > $DATA/clean/pooled_filtered_qiime.fasta
+sed '/^>/ s/\./_/' $INFILE \
+    > $OUTDIR/pooled_filtered_qiime.fasta
 
 ### The rest of the pipeline is executed with QIIME scripts
-
-if [ ! -d "$RESULTS/uclust" ]; then
-    mkdir $RESULTS/uclust
-fi
 
 # Identify chimeric sequences 
 printf "\nIdentifying chimeric sequences...\n"
 identify_chimeric_seqs.py -m usearch61 \
-        -i $DATA/clean/pooled_filtered_qiime.fasta \
-        -r $DATA/reference/gold.fa \
-        -o $RESULTS/uclust/
+        -i $OUTDIR/pooled_filtered_qiime.fasta \
+        -r $REF \
+        -o $OUTDIR/
 
 # Filter out identified chimeric sequences
 printf "\nRemoving chimeric sequences from sample reads...\n"
-filter_fasta.py -f $DATA/clean/pooled_filtered_qiime.fasta \
-        -o $RESULTS/uclust/pooled_nochim.fa \
-        -s $RESULTS/uclust/chimeras.txt \
+filter_fasta.py -f $OUTDIR/pooled_filtered_qiime.fasta \
+        -o $OUTDIR/pooled_nochim.fa \
+        -s $OUTDIR/chimeras.txt \
         -n 
 
 # Pick de novo OTUs
@@ -47,11 +74,14 @@ filter_fasta.py -f $DATA/clean/pooled_filtered_qiime.fasta \
 printf "\nPicking OTUs (de novo) and representative seqeunces, assigning\n"
 printf "taxonomy, performing multiple alignments, and building a\n"
 printf "phylogenetic tree...\n"
-pick_de_novo_otus.py -i $RESULTS/uclust/pooled_nochim.fa \
-        -o $RESULTS/uclust/ \
+pick_de_novo_otus.py -i $OUTDIR/pooled_nochim.fa \
+        -o $OUTDIR/ \
         -f
 
 # Convert the .biom file to a tabbed .txt file
-biom convert -i $RESULTS/uclust/otu_table.biom \
-     -o $RESULTS/uclust/otu_table.txt \
+biom convert -i $OUTDIR/otu_table.biom \
+     -o $OUTDIR/otu_table.txt \
      --to-tsv
+
+# Deactivate miniconda3 environment
+source deactivate
