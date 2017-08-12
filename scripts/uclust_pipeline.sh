@@ -5,8 +5,7 @@
 ### This script implements the UCLUST pipeline through the QIIME SOP
 ### (see www.qiime.org for detailed documentation)
 
-# Set the default input file and output directory
-#DATA=~/projects/thesis/data
+# Set the default input file, output directory, and 16S reference db
 INFILE=~/projects/thesis/data/filtered/pooled_filtered.fasta
 OUTDIR=~/projects/thesis/results/uclust
 REF=~/projects/thesis/data/references/gold.fa
@@ -36,8 +35,8 @@ do
     shift
 done
 
-echo INPUT FILE = "${INFILE}"
-echo OUTPUT DIRECTORY = "${OUTDIR}"
+printf "\nINPUT FILE = ""${INFILE}""\n"
+printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
 
 # Create the output directory, if necessary
 if [ ! -d "$OUTDIR" ]; then
