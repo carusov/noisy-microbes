@@ -1,28 +1,56 @@
 #!/bin/bash
 
-DATA=~/projects/thesis/data
-RESULTS=~/projects/thesis/results
+### Author: Vincent Caruso
+### Date: 7/27/2017
+### Purpose: This script implements the MED pipeline
+### (see www.merenlab.org for documentation)
 
-### First open the MED environment using miniconda
+
+# Set the default input file and output directory
+INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/projects/thesis/results/med
+
+# Parse command-line options
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+	-i|--input)
+	    INFILE="$2"
+	    shift;;
+	-o|--output)
+	    OUTDIR="$2"
+	    shift;;
+	-h|--help)
+	    printf "\nUSAGE: med_pipeline.sh -i input_file -o output_directory\n\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
+done
+
+printf "\nINPUT FILE = ""${INFILE}""\n"
+printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
+
+# Create the output directory, if necessary
+if [ ! -d "$OUTDIR" ]; then
+    mkdir $OUTDIR
+fi
+
+# Open the MED environment using miniconda
 source activate med
 
-### Now, use 'sed' to convert a fasta file from the USEARCH label format
-### (using the '-relabel @' option) to the MED format.
-printf "Converting filtered fasta file to MED-friendly format...\n"
-sed '/^>/ s/\./_/' $DATA/clean/pooled_filtered.fasta \
-    > $DATA/clean/pooled_filtered_med.fasta
+# Pad shorter reads with gaps so all reads have the same length.
+# (This is an MED requirement.)
+o-pad-with-gaps $INFILE \
+		-o $OUTDIR/pooled_filtered_med.fasta
 
-### Pad shorter reads with gaps so all reads have the same length.
-### (This is an MED requirement.)
-o-pad-with-gaps $DATA/clean/pooled_filtered_med.fasta \
-		-o $DATA/clean/pooled_filtered_med_padded.fasta
-mv $DATA/clean/pooled_filtered_med_padded.fasta $DATA/clean/pooled_filtered_med.fasta
-
-### Make sure the output directory exists
-if [ ! -d "$RESULTS/med" ]; then
-   mkdir $RESULTS/med
-fi
-   
-### Finally, run the MED algorithm on the formatted fasta file   
+# Finally, run the MED algorithm on the formatted fasta file   
 printf "Running the MED pipeline..."
-decompose $DATA/clean/pooled_filtered_med.fasta -o $RESULTS/med
+decompose $OUTDIR/pooled_filtered_med.fasta -o $OUTDIR
+
+# Deactivate the med environment
+source deactivate
