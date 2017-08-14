@@ -6,7 +6,7 @@
 ### (see www.qiime.org for detailed documentation)
 
 # Set the default input file, output directory, and 16S reference db
-INFILE=~/projects/thesis/data/filtered/pooled_filtered.fasta
+INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
 OUTDIR=~/projects/thesis/results/uclust
 REF=~/projects/thesis/data/references/gold.fa
 
@@ -46,23 +46,18 @@ fi
 # Activate the qiime environment in miniconda
 source activate qiime1
 
-# Reformat sequence files to QIIME format
-printf "\nReformatting read sequences to QIIME format...\n"
-sed '/^>/ s/\./_/' $INFILE \
-    > $OUTDIR/pooled_filtered_qiime.fasta
-
 ### The rest of the pipeline is executed with QIIME scripts
 
 # Identify chimeric sequences 
 printf "\nIdentifying chimeric sequences...\n"
 identify_chimeric_seqs.py -m usearch61 \
-        -i $OUTDIR/pooled_filtered_qiime.fasta \
+        -i $INFILE \
         -r $REF \
         -o $OUTDIR/
 
 # Filter out identified chimeric sequences
 printf "\nRemoving chimeric sequences from sample reads...\n"
-filter_fasta.py -f $OUTDIR/pooled_filtered_qiime.fasta \
+filter_fasta.py -f $INFILE \
         -o $OUTDIR/pooled_nochim.fa \
         -s $OUTDIR/chimeras.txt \
         -n 
