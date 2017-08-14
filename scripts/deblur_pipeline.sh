@@ -5,30 +5,63 @@
 ### Purpose: This script implement the Deblur pipeline according to its
 ### recommended usage (see github.com/biocore/deblur).
 
-DATA=~/projects/thesis/data
-RESULTS=~/projects/thesis/results
-REF=/media/sf_Shared_Ubuntu/references
+# Set the default input file and output directory
+INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/projects/thesis/results/deblur
+REF_FILE=~/projects/thesis/data/references/silva_nr_v128_train_set.fa
+
+# Parse command-line options
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+	-i|--input)
+	    INFILE="$2"
+	    shift;;
+	-o|--output)
+	    OUTDIR="$2"
+	    shift;;
+	-h|--help)
+	    printf "\nUSAGE: deblur_pipeline.sh -i input_file -o output_directory\n\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
+done
+
+printf "\nINPUT FILE = ""${INFILE}""\n"
+printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
+
+# Create the output directory, if necessary
+if [ ! -d "$OUTDIR" ]; then
+    mkdir $OUTDIR
+fi
 
 # First activate the deblur environment in miniconda
-printf "\nActivating the deblur environment...\n"
 source activate deblur
 
 # Now run the deblur workflow, using the QIIME-formatted file as input
 printf "\nRunning the deblur workflow...\n"
-deblur workflow --seqs-fp $DATA/clean/pooled_filtered_qiime.fasta \
-       --output-dir $RESULTS/deblur \
+deblur workflow --seqs-fp $INFILE \
+       --output-dir $OUTDIR \
        -t 230 \
-       --pos-ref-fp $DATA/references/silva_nr_v128_train_set.fa \
-       --log-file $RESULTS/deblur/deblur.log \
+       --pos-ref-fp $REF_FILE \
+       --log-file $OUTDIR/deblur.log \
        --overwrite
 
 # Convert the .biom files to .txt files
-biom convert -i $RESULTS/deblur/reference-hit.biom \
-     -o $RESULTS/deblur/reference-hit.txt \
+biom convert -i $OUTDIR/reference-hit.biom \
+     -o $OUTDIR/reference-hit.txt \
      --to-tsv
-biom convert -i $RESULTS/deblur/reference-non-hit.biom \
-     -o $RESULTS/deblur/reference-non-hit.txt \
+biom convert -i $OUTDIR/reference-non-hit.biom \
+     -o $OUTDIR/reference-non-hit.txt \
      --to-tsv
-biom convert -i $RESULTS/deblur/all.biom \
-     -o $RESULTS/deblur/all.txt \
+biom convert -i $OUTDIR/all.biom \
+     -o $OUTDIR/all.txt \
      --to-tsv
+
+#Deactivate the deblur environmnet
+source deactivate
