@@ -94,10 +94,7 @@ fi
 for fq in $(ls $INDIR/*_R1.fastq)
 do
     bn=$(basename $fq)
-    printf "********************\n"
-    printf $bn"\n"
     bn=${bn%%_*.fastq}
-    printf $bn"\n"
     nn=$bn"_merged.fastq"
     usearch -fastq_mergepairs $fq \
 	    -fastqout $OUTDIR/merged/$nn \
@@ -175,3 +172,9 @@ usearch -fastq_filter $OUTDIR/merged/pooled_merged.fastq \
 ### Create a report with summary stats on the filtered reads
 usearch -fastx_info $OUTDIR/filtered/pooled_filtered.fastq \
 	-output $OUTDIR/reports/pooled_filtered_info.txt
+
+# Reformat sequence files to QIIME format
+printf "\nReformatting read sequences to QIIME format...\n"
+sed '/^>/ s/\./_/' $OUTDIR/filtered/pooled_filtered.fasta \
+    > $OUTDIR/filtered/pooled_filtered_qiime.fasta
+
