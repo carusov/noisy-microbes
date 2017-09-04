@@ -8,7 +8,7 @@
 # Set the default input file and output directory
 INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
 OUTDIR=~/projects/thesis/results/deblur
-REF_FILE=~/projects/thesis/data/references/silva_nr_v128_train_set.fa
+REF_FILE=~/projects/thesis/data/references/silva_nr_v128_prokaryotes.fa
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
