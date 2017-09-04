@@ -58,15 +58,12 @@ usearch -unoise3 $OUTDIR/pooled_uniques.fastq \
 	-ampout $OUTDIR/amplicons.fa \
 	-tabbedout $OUTDIR/unoise3.txt
 
-# Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
-usearch -search_exact $OUTDIR/amplicons.fa \
-	-db $OUTDIR/zotus.fa \
-	-strand plus \
-	-notmatched $OUTDIR/chimeras.fa
+# USEARCH bug workaround: change 'Zotu' to 'OTU' in 'zotus.fa'
+sed -i '/^>/ s/Zotu/OTU/' $OUTDIR/zotus.fa
 
 # Use the generated OTUs to create an OTU table
 usearch -otutab $RAW_MERGED_FILE \
-	-otus $OUTDIR/zotus.fa \
+	-zotus $OUTDIR/zotus.fa \
 	-otutabout $OUTDIR/zotu_table.txt \
 	-biomout $OUTDIR/zotu_table.biom \
 	-mapout $OUTDIR/map.txt \
@@ -83,6 +80,12 @@ usearch -fastq_filter $OUTDIR/unmapped_reads.fastq \
 	-fastq_maxee 2.0 \
 	-fastaout $OUTDIR/unmapped_hiqual.fa \
 	-fastaout_discarded $OUTDIR/unmapped_loqual.fa
+
+# Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
+usearch -search_exact $OUTDIR/amplicons.fa \
+	-db $OUTDIR/zotus.fa \
+	-strand plus \
+	-notmatched $OUTDIR/chimeras.fa
 
 # Combine predicted OTUs and chimeras into a single database
 cat $OUTDIR/zotus.fa $OUTDIR/chimeras.fa \
