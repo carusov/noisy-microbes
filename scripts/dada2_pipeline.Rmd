@@ -16,7 +16,6 @@ First, load required libraries.
 
 library("dada2")
 library("stringr")
-library("Biostrings")
 library("ggplot2")
 
 ```
@@ -24,15 +23,18 @@ library("ggplot2")
 Next, set the working directory and file paths.
 ```{r paths}
 
-data_path <- "~/projects/thesis/data"
-result_path <- "~/projects/thesis/results"
-raw_path <- file.path(data_path, "raw")
-filt_path <- file.path(data_path, "filtered")
-ref_path <- file.path(data_path, "reference")
-dada2_path <- file.path(result_path, "dada2")
-setwd(data_path)
+data_path <- "~/projects/thesis/data"     # parent directory for raw and filtered data and reference dbs
+result_path <- "~/projects/thesis/results"    # parent directory for outputs of read processsing methods
+raw_path <- file.path(data_path, "raw")     # directory containing raw read files
+ref_path <- file.path(data_path, "references")    # directory containing reference databases
+dada2_path <- file.path(result_path, "dada2")     # directory where DADA2 processing results will be stored
+filt_path <- file.path(dada2_path, "filtered")     # directory where filtered reads will be stored
 
-#load(file.path(dada2_path, "dadas.RData"))
+if (!file_test("-d", dada2_path)) dir.create(dada2_path)
+if (!file_test("-d", filt_path)) dir.create(filt_path)
+
+#load(file.path(dada2_path, "dada2.RData"))
+#load(file.path(dada2_path, "tables.RData"))
 
 ```
 
@@ -52,11 +54,10 @@ if (str_detect(fastqs[1], "^lane1-")){
     new_name <- str_replace(new_name, "index-[ACGT]+-", "")
     new_name <- str_replace(new_name, "_S\\d{3}_L001", "")
     new_name <- str_replace(new_name, "_001", "")
+    #new_name <- str_replace(new_name, "-", ".")
     file.rename(fastqs[i], new_name)
   }
 }
-
-setwd(data_path)
 
 ```
 
@@ -66,7 +67,6 @@ setwd(data_path)
 First, I want to look at the quality profiles of forward and reverse reads separately.
 ```{r plot qualities}
 
-file_names <- list.files(raw_path)
 fastqs <- str_subset(file_names, ".fastq$")
 fastq_Fs <- str_subset(fastqs, "_R1")
 fastq_Rs <- str_subset(fastqs, "_R2")
@@ -75,16 +75,16 @@ fastq_Rs <- str_subset(fastqs, "_R2")
 sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
 
 # plot quality
-plotQualityProfile(file.path(raw_path, fastq_Fs[1])) + 
-  scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
-  scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-  theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
-  ggtitle(str_replace(fastq_Fs[1], ".fastq", ""))
-plotQualityProfile(file.path(raw_path, fastq_Rs[1])) + 
-  scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
-  scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-  theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
-  ggtitle(str_replace(fastq_Rs[1], ".fastq", ""))
+# plotQualityProfile(file.path(raw_path, fastq_Fs[1])) + 
+#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+#   theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
+#   ggtitle(str_replace(fastq_Fs[1], ".fastq", ""))
+# plotQualityProfile(file.path(raw_path, fastq_Rs[1])) + 
+#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+#   theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
+#   ggtitle(str_replace(fastq_Rs[1], ".fastq", ""))
 
 
 ```
@@ -93,31 +93,22 @@ The quality isn't great for most of the read sets. For the "Neat" sample, I'll t
 ```{r filter}
 
 #Set up a directory and file names for the filtered reads
-if (!file_test("-d", filt_path)) dir.create(filt_path)
-filt_Fs <- paste0(sample_names, "_F_filt.fastq")
-filt_Rs <- paste0(sample_names, "_R_filt.fastq")
+#if (!file_test("-d", filt_path)) dir.create(filt_path, recursive = TRUE)
+filt_Fs <- paste0(sample_names, "_R1_filt.fastq")
+filt_Rs <- paste0(sample_names, "_R2_filt.fastq")
 
 #Filter paired read sets
-for (i in seq_along(fastq_Fs)){
-  fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(filt_path, c(filt_Fs[i], filt_Rs[i])), 
-                    truncLen = c(230, 210), trimLeft = c(10,10),
-                    maxN = 0, maxEE = c(3,4), truncQ = 2, rm.phix = TRUE,
-                    compress = FALSE, verbose = TRUE)
-}
+filt_stats <- filterAndTrim(fwd = file.path(raw_path, fastq_Fs), filt = file.path(filt_path, filt_Fs),
+                            rev = file.path(raw_path, fastq_Rs), filt.rev = file.path(filt_path, filt_Rs),
+                            truncLen = c(230, 210), trimLeft = 10, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
+                            compress = TRUE, verbose = TRUE, multithread = TRUE)
 
-```
-
-
-##Dereplication
-
-Collapse sequence replicates into single sequences, each with a summary of the quality scores at each base position.
-```{r dereplicate}
-
-derep_Fs <- derepFastq(file.path(filt_path, filt_Fs), verbose = TRUE)
-derep_Rs <- derepFastq(file.path(filt_path, filt_Rs), verbose = TRUE)
-
-names(derep_Fs) <- sample_names
-names(derep_Rs) <- sample_names
+# for (i in seq_along(fastq_Fs)){
+#   fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(filt_path, c(filt_Fs[i], filt_Rs[i])), 
+#                     truncLen = c(230, 210), trimLeft = c(10,10),
+#                     maxN = 0, maxEE = c(3,4), truncQ = 2, rm.phix = TRUE,
+#                     compress = FALSE, verbose = TRUE)
+# }
 
 ```
 
@@ -127,34 +118,58 @@ names(derep_Rs) <- sample_names
 Learn the error rates from the data.
 ```{r errors}
 
-dada_Fs.lrn <- dada(derep_Fs, err = NULL, selfConsist = TRUE, multithread = TRUE)
-dada_Rs.lrn <- dada(derep_Rs, err = NULL, selfConsist = TRUE, multithread = TRUE)
+# dada_Fs.lrn <- dada(derep_Fs, err = NULL, selfConsist = TRUE, multithread = TRUE)
+# dada_Rs.lrn <- dada(derep_Rs, err = NULL, selfConsist = TRUE, multithread = TRUE)
 
-err_Fs <- dada_Fs.lrn[[1]]$err_out
-err_Rs <- dada_Rs.lrn[[1]]$err_out
+# err_Fs <- dada_Fs.lrn[[1]]$err_out
+# err_Rs <- dada_Rs.lrn[[1]]$err_out
+
+setwd(filt_path)
+
+err_F <- learnErrors(filt_Fs, multithread = TRUE)
+err_R <- learnErrors(filt_Rs, multithread = TRUE)
 
 ```
 
 Let's take a look at the learned errors.
 ```{r plot errors}
 
-plotErrors(dada_Fs.lrn[[1]], nominalQ = TRUE)
-plotErrors(dada_Rs.lrn[[1]], nominalQ = TRUE)
+# plotErrors(dada_Fs.lrn[[1]], nominalQ = TRUE)
+# plotErrors(dada_Rs.lrn[[1]], nominalQ = TRUE)
 
 
 ```
 
+##Dereplication
+
+Collapse sequence replicates into single sequences, each with a summary of the quality scores at each base position.
+```{r dereplicate}
+
+setwd(filt_path)
+
+derep_Fs <- derepFastq(filt_Fs, verbose = TRUE)
+derep_Rs <- derepFastq(filt_Rs, verbose = TRUE)
+
+names(derep_Fs) <- sample_names
+names(derep_Rs) <- sample_names
+
+```
+
+
+##Inference of sequence variants
+
 Since I used all the read data to learn the error rates, the sequence inference for all samples has already been done by DADA2. However, I'll do the inference again formally here, for consistency, using the learned error rates.
 ```{r SV inference}
 
-dada_Fs <- dada(derep_Fs, err = err_Fs, multithread = TRUE)
-dada_Rs <- dada(derep_Rs, err = err_Rs, multithread = TRUE)
+dada_Fs <- dada(derep_Fs, err = err_F, multithread = TRUE)
+dada_Rs <- dada(derep_Rs, err = err_R, multithread = TRUE)
 
 dada_Fs[[10]]
 dada_Rs[[10]]
 
 # Save the dada objects
-save(derep_Fs, derep_Rs, dada_Fs.lrn, dada_Rs.lrn, dada_Fs, dada_Rs, file = file.path(dada2_path, "dada2.RData"))
+#if (!file_test("-d", dada2_path)) dir.create(dada2_path)
+save(err_F, err_R, derep_Fs, derep_Rs, dada_Fs, dada_Rs, file = file.path(dada2_path, "dada2.RData"))
 
 ```
 
@@ -164,11 +179,12 @@ save(derep_Fs, derep_Rs, dada_Fs.lrn, dada_Rs.lrn, dada_Fs, dada_Rs, file = file
 Like it says, now I'm going to merge the paired reads. This will reduce the number of spurious sequences.
 ```{r merge SVs}
 
-merged <- mergePairs(dada_Fs, derep_Fs, dada_Rs, derep_Rs, maxMismatch = 0, 
+load(file = file.path(dada2_path, "dada2.RData"))
+mergers <- mergePairs(dada_Fs, derep_Fs, dada_Rs, derep_Rs, 
                      propagateCol = c("n0", "n1", "birth_fold", "birth_ham"), 
                      verbose = TRUE)
 
-head(merged[[1]])
+head(mergers[[1]])
 
 ```
 
@@ -178,7 +194,7 @@ head(merged[[1]])
 This converts the inferred sequence data into a table, similar to an OTU table.
 ```{r sequence table}
 
-sv_table <- makeSequenceTable(merged)
+sv_table <- makeSequenceTable(mergers)
 dim(sv_table)
 
 table(nchar(getSequences(sv_table)))
@@ -190,9 +206,9 @@ If there are any sequences with lengths outside the expected range for the V4 re
 
 # min_len <- 230
 # max_len <- 235
-# sv_table.good <- sv_table[, nchar(getSequences(sv_table)) %in% seq(min_len, max_len)]
+# sv_table <- sv_table[, nchar(getSequences(sv_table)) %in% seq(min_len, max_len)]
 # 
-# table(nchar(getSequences(sv_table.253)))
+# table(nchar(getSequences(sv_table)))
 
 
 ```
@@ -203,7 +219,7 @@ If there are any sequences with lengths outside the expected range for the V4 re
 DADA2 only considers "bimeras", or chimeras spawned from exactly two parents sequences.
 ```{r remove chimeras}
 
-sv_table.no_chim <- removeBimeraDenovo(sv_table, verbose = TRUE)
+sv_table.no_chim <- removeBimeraDenovo(sv_table, method = "consensus", verbose = TRUE)
 dim(sv_table.no_chim)
 
 #check what percentage of reads remain
@@ -215,14 +231,28 @@ rowSums(sv_table.no_chim > 0)
 ```
 
 
+##Track read retention through the pipeline
+
+See how many reads were retained or discarded at each stage of processing.
+```{r track reads}
+
+getN <- function(x) sum(getUniques(x))
+track_table <- cbind(filt_stats, sapply(dada_Fs, getN), sapply(mergers, getN), rowSums(sv_table), rowSums(sv_table.no_chim))
+colnames(track_table) <- c("raw", "filtered", "denoised", "merged", "tabled", "non_chim")
+rownames(track_table) <- sample_names
+track_table
+
+```
+
 ##Assign taxonomy
 ```{r taxonomy}
 
-taxa <- assignTaxonomy(sv_table.no_chim, file.path(ref_path, "silva_nr_v123_train_set.fa.gz"))
-genus.species <- assignSpecies(sv_table.no_chim, file.path(ref_path, "silva_species_assignment_v123.fa.gz"))
+taxa <- assignTaxonomy(sv_table.no_chim, file.path(ref_path, "silva_nr_v128_train_set.fa.gz"), multithread = TRUE)
+genus.species <- assignSpecies(sv_table.no_chim, file.path(ref_path, "silva_species_assignment_v128.fa.gz"))
 
 # save tables
-save(merged, sv_table, sv_table.no_chim, taxa, genus.species, file = file.path(dada2_path, "tables.RData"))
+save(mergers, sv_table, sv_table.no_chim, track_table, taxa, genus.species, file = file.path(dada2_path, "tables.RData"))
+write.table(sv_table.no_chim, file = file.path(dada2_path, "sv_table.no_chim.txt"), quote = FALSE, sep = "\t")
 
 ```
 
