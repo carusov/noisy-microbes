@@ -49,17 +49,21 @@ sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
 qual_path <- file.path(raw_path, "quality")
 if (!file_test("-d", qual_path)) dir.create(qual_path)
 
+
 #plot quality
-# for (fq in fastqs){
-#   plotQualityProfile(file.path(raw_path, fq)) + 
-#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
-#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-#   theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
-#   ggtitle(str_replace(fq, ".fastq", ""))
-#   
-#   fname <- str_replace(fq, "fastq", "png")
-#   ggsave(file.path(qual_path, fname), width = 10, height = 7)
-# }
+if (length(list.files(qual_path)) == 0){
+  for (fq in fastqs){
+    plotQualityProfile(file.path(raw_path, fq)) +
+    scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
+    scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
+    theme(panel.grid.major = element_line(colour="grey", size=0.5)) +
+    ggtitle(str_replace(fq, ".fastq", ""))
+  
+    fname <- str_replace(fq, "fastq", "png")
+    ggsave(file.path(qual_path, fname), width = 10, height = 7)
+  }
+}
+
 
 # plotQualityProfile(file.path("raw", fastq_Fs[10])) + 
 #   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
