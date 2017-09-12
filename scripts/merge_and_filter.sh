@@ -7,9 +7,11 @@
 ### the USEARCH software to perform merging and filtering.
 ### (see www.drive5.com/usearch for detailed documentation)
 
-# Set the default input and output directories
-INDIR=~/projects/thesis/data/truncated
-OUTDIR=~/projects/thesis/data
+# Define the scripts path
+SCRIPTS=~/projects/thesis/noisy-microbes/scripts
+
+# Set the default working directory
+WDIR=~/projects/thesis/data/dilution_w_blank
 
 # Set the default merge parameters
 MAXDIFFS=30
@@ -27,11 +29,8 @@ do
     key="$1"
 
     case $key in
-	-i|--input)
-	    INDIR="$2"
-	    shift;;
-	-o|--output)
-	    OUTDIR="$2"
+	-w|--working_dir)
+	    WDIR="$2"
 	    shift;;
 	-m|--maxdiffs)
 	    MAXDIFFS="$2"
@@ -61,66 +60,76 @@ do
     shift
 done
 
-printf "\nINPUT DIRECTORY = ""${INDIR}""\n"
-printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
+printf "\nWORKING DIRECTORY = ""${WDIR}""\n"
 
 # Create the output directory, if necessary
-if [ ! -d $OUTDIR ]; then
-    mkdir $OUTDIR
+#if [ ! -d $WDIR ]; then
+#    mkdir $WDIR
+#fi
+
+# Create the 'truncated' directory, if necessary
+if [ ! -d $WDIR/truncated ]; then
+    mkdir $WDIR/truncated
+else
+    rm $WDIR/merged/*.fastq
 fi
 
 # Create the 'merged' directory, if necessary
-if [ ! -d $OUTDIR/merged ]; then
-    mkdir $OUTDIR/merged
+if [ ! -d $WDIR/merged ]; then
+    mkdir $WDIR/merged
 else
-    rm $OUTDIR/merged/*.fastq
+    rm $WDIR/merged/*.fastq
 fi
 
 # Create the 'filtered' directory, if necessary
-if [ ! -d $OUTDIR/filtered ]; then
-    mkdir $OUTDIR/filtered
+if [ ! -d $WDIR/filtered ]; then
+    mkdir $WDIR/filtered
 else
-    rm $OUTDIR/filtered/*.fastq
+    rm $WDIR/filtered/*.fastq
 fi
 
 # Create the 'reports' directory, if necessary
-if [ ! -d $OUTDIR/reports ]; then
-    mkdir $OUTDIR/reports
+if [ ! -d $WDIR/reports ]; then
+    mkdir $WDIR/reports
 else
-    rm $OUTDIR/reports/*.txt
+    rm $WDIR/reports/*.txt
 fi
 
+# First, run the .Rmd script that truncates the .fastq reads
+#rmd2r.R -i ~/projects/thesis/noisy-microbes/scripts/fastq_truncate.Rmd
+Rscript $SCRIPTS/fastq_truncate.R -d $WDIR
+
 ### Merge reads from individual samples to get stats for publication
-for fq in $(ls $INDIR/*_R1.fastq)
+for fq in $(ls $WDIR/truncated/*_R1.fastq)
 do
     bn=$(basename $fq)
     bn=${bn%%_*.fastq}
     nn=$bn"_merged.fastq"
     usearch -fastq_mergepairs $fq \
-	    -fastqout $OUTDIR/merged/$nn \
+	    -fastqout $WDIR/merged/$nn \
 	    -relabel @ \
 	    -fastq_maxdiffs $MAXDIFFS \
 	    -fastq_pctid $PCTID \
 	    -fastq_minmergelen $MINMERGELEN \
 	    -fastq_maxmergelen $MAXMERGELEN \
-	    -report $OUTDIR/reports/$bn"_merge_report.txt"
+	    -report $WDIR/reports/$bn"_merge_report.txt"
 
-    usearch -fastx_info $OUTDIR/merged/$nn \
-	    -output $OUTDIR/reports/$bn"_merged_info.txt"
+    usearch -fastx_info $WDIR/merged/$nn \
+	    -output $WDIR/reports/$bn"_merged_info.txt"
 done
 
 # Now filter the individual samples too, in case we need stats on the output of filtering
-for fq in $(ls $OUTDIR/merged/*_merged.fastq)  
+for fq in $(ls $WDIR/merged/*_merged.fastq)  
 do
     bn=$(basename $fq _merged.fastq)
     nn=$bn"_filtered.fastq"
     usearch -fastq_filter $fq \
-	    -fastqout $OUTDIR/filtered/$nn \
+	    -fastqout $WDIR/filtered/$nn \
 	    -fastq_maxee $MAXEE \
 	    -fastq_maxns $MAXNS
     
-    usearch -fastx_info $OUTDIR/filtered/$nn \
-	    -output $OUTDIR/reports/$bn"_filtered_info.txt"
+    usearch -fastx_info $WDIR/filtered/$nn \
+	    -output $WDIR/reports/$bn"_filtered_info.txt"
 done
 
 ################################################################################
@@ -144,37 +153,37 @@ done
 ### present in the reads.
 
 ### First merge forward and reverse reads from each sample, and pool the merged reads
-usearch -fastq_mergepairs $INDIR/*R1.fastq \
-	-fastqout $OUTDIR/merged/pooled_merged.fastq \
+usearch -fastq_mergepairs $WDIR/truncated/*R1.fastq \
+	-fastqout $WDIR/merged/pooled_merged.fastq \
 	-relabel @ \
 	-fastq_maxdiffs $MAXDIFFS \
 	-fastq_pctid $PCTID \
 	-fastq_minmergelen $MINMERGELEN \
 	-fastq_maxmergelen $MAXMERGELEN \
-        -report $OUTDIR/reports/pooled_merge_report.txt
+        -report $WDIR/reports/pooled_merge_report.txt
 
 ### Create a report with summary stats on the merged reads
-usearch -fastx_info $OUTDIR/merged/pooled_merged.fastq \
-	-output $OUTDIR/reports/pooled_merged_info.txt
+usearch -fastx_info $WDIR/merged/pooled_merged.fastq \
+	-output $WDIR/reports/pooled_merged_info.txt
 
 ### Create a report of the expected errors of the merged reads
-usearch -fastq_eestats2 $OUTDIR/merged/pooled_merged.fastq \
-	-output $OUTDIR/reports/pooled_merged_eestats.txt \
+usearch -fastq_eestats2 $WDIR/merged/pooled_merged.fastq \
+	-output $WDIR/reports/pooled_merged_eestats.txt \
 	-length_cutoffs 200,*,10
 
 ### Quality filter the reads using a maximum of 2.0 expected errors
-usearch -fastq_filter $OUTDIR/merged/pooled_merged.fastq \
-	-fastqout $OUTDIR/filtered/pooled_filtered.fastq \
-	-fastaout $OUTDIR/filtered/pooled_filtered.fasta \
+usearch -fastq_filter $WDIR/merged/pooled_merged.fastq \
+	-fastqout $WDIR/filtered/pooled_filtered.fastq \
+	-fastaout $WDIR/filtered/pooled_filtered.fasta \
 	-fastq_maxee $MAXEE \
 	-fastq_maxns $MAXNS
 
 ### Create a report with summary stats on the filtered reads
-usearch -fastx_info $OUTDIR/filtered/pooled_filtered.fastq \
-	-output $OUTDIR/reports/pooled_filtered_info.txt
+usearch -fastx_info $WDIR/filtered/pooled_filtered.fastq \
+	-output $WDIR/reports/pooled_filtered_info.txt
 
 # Reformat sequence files to QIIME format
 printf "\nReformatting read sequences to QIIME format...\n"
-sed '/^>/ s/\./_/' $OUTDIR/filtered/pooled_filtered.fasta \
-    > $OUTDIR/filtered/pooled_filtered_qiime.fasta
+sed '/^>/ s/\./_/' $WDIR/filtered/pooled_filtered.fasta \
+    > $WDIR/filtered/pooled_filtered_qiime.fasta
 
