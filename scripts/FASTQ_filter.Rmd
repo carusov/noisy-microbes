@@ -9,7 +9,7 @@ output: html_document
 
 library("knitr")
 knitr::opts_chunk$set(echo = TRUE)
-opts_knit$set(root.dir = "~/projects/thesis/data")
+#opts_knit$set(root.dir = "~/projects/thesis/data")
 ```
 
 ```{r}
@@ -21,7 +21,7 @@ library("stringr")
 
 ```
 
-##Filter .fastq files
+##Filtering strategy
 
 There are two strategies I'm considering for quality filtering the raw .fastq files from the mock community dilution series sequencing experiment:
 
@@ -29,14 +29,58 @@ There are two strategies I'm considering for quality filtering the raw .fastq fi
 
 2. Truncate the low-quality heads and tails of forward and reverse reads independently, then merge the truncated reads, and finally quality filter the merged reads, again based on expected errors. This approach requires the use of the `fastqPairedFilter` function in DADA2 for the initial truncation step, since only this filter maintains the consistent ordering of the forward and reverse reads.
 
-Here, I'll use approach #2. 
+Here, I'll use approach #2. In this script, I'm only performing truncation (as well as removing any residual phiX) with `fastqPairedFilter`, since I still want to merge the resulting .fastq files with USEARCH's `fastq_mergepairs` before doing quality filtering. I'll also use USEARCH to do quality filtering with `fastq_filter`. 
+
+
+##Get working directory from command line
+
+```{r}
+
+library(optparse)
+ 
+option_list = list(
+  make_option(c("-d", "--data"), type = "character", default = NULL, 
+              help = "data directory", metavar = "character")
+)
+ 
+opt_parser = OptionParser(option_list=option_list)
+opt = parse_args(opt_parser)
+
+```
+
+##Rename files
+
+First things first: the file names are really long and contain redundant information, so I'll rename them to remove the unnecessary bits.
+```{r rename files}
+
+#data_path <- "~/projects/thesis/data/dilution"
+data_path <- opt$data
+raw_path <- file.path(data_path, "raw")
+#setwd(raw_path)
+
+file_names <- list.files(raw_path)
+fastqs <- str_subset(file_names, ".fastq$")
+
+# rename files in MockCommunities folder
+
+if (str_detect(fastqs[1], "^lane1-")){
+  for (i in seq_along(fastqs)){
+    new_name <- fastqs[i]
+    new_name <- str_replace(new_name, "lane1-", "")
+    new_name <- str_replace(new_name, "index-[ACGT]+-", "")
+    new_name <- str_replace(new_name, "_S\\d{3}_L001", "")
+    new_name <- str_replace(new_name, "_001", "")
+    #new_name <- str_replace(new_name, "-", ".")
+    file.rename(file.path(raw_path, fastqs[i]), new_name)
+  }
+}
+
+```
+
+##Plot quality profile
 
 First, I'll look at the quality profile of each read set to determine where to truncate.
 ```{r}
-
-data_path <- "~/projects/thesis/data"
-setwd(data_path)
-raw_path <- file.path(data_path, "raw")
 
 file_names <- list.files(raw_path)
 fastqs <- str_subset(file_names, ".fastq$")
@@ -77,7 +121,10 @@ if (length(list.files(qual_path)) == 0){
 
 ```
 
-Based on the quality profiles, I'll truncate the forward reads at position 230, and the reverse at position 210. I'll also strip the first 15 nucleotides.
+
+##Truncate .fastq's
+
+Based on the quality profiles, I'll truncate the forward reads at position 230, and the reverse at position 210. I'll also strip the first 10 nucleotides.
 ```{r}
 
 # Set up a directory and file names for the truncated reads
