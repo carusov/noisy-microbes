@@ -6,9 +6,9 @@
 ### (see www.qiime.org for detailed documentation)
 
 # Set the default input file, output directory, and 16S reference db
-INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/projects/thesis/results/uclust
-REF=~/projects/thesis/data/references/gold.fa
+INFILE=~/projects/thesis/data/dilution_w_blank/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/projects/thesis/results/dilution_w_blank/uclust
+REF_FILE=~/projects/thesis/references/gold.fa
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -23,7 +23,7 @@ do
 	    OUTDIR="$2"
 	    shift;;
 	-r|--reference)
-	    REF="$2"
+	    REF_FILE="$2"
 	    shift;;
 	-h|--help)
 	    printf "\nUSAGE: uclust_pipeline.sh -i input_file -o output_directory -r 16S_reference_db.fasta\n\n"
@@ -52,7 +52,7 @@ source activate qiime1
 printf "\nIdentifying chimeric sequences...\n"
 identify_chimeric_seqs.py -m usearch61 \
         -i $INFILE \
-        -r $REF \
+        -r $REF_FILE \
         -o $OUTDIR/
 
 # Filter out identified chimeric sequences

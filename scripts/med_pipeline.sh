@@ -7,8 +7,8 @@
 
 
 # Set the default input file and output directory
-INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/projects/thesis/results/med
+INFILE=~/projects/thesis/data/dilution_w_blank/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/projects/thesis/results/dilution_w_blank/med
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
