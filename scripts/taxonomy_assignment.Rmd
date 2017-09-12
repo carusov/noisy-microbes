@@ -45,6 +45,7 @@ summary(uclust_table)
 write.table(uclust_table, file = file.path(result_path, "uclust/uclust_table.txt"), quote = FALSE, sep = "\t")
 
 sample_names <- colnames(uclust_table)
+dilutions <- sample_names[-1]
 
 # load UPARSE table
 uparse_table <- read.table(file = file.path(result_path, "uparse/otu_table.txt"), header = TRUE, sep = "\t", comment.char = "")
@@ -80,7 +81,7 @@ write.table(med_table, file = file.path(result_path, "med/med_table.txt"), quote
 # load Deblur table
 deblur_table <- read.table(file = file.path(result_path, "deblur/all.txt"), header = TRUE, sep = "\t", skip = 1, comment.char = "")
 head(deblur_table)
-row.names(deblur_table) <- deblur_table[, 1]  # name rows by sequence
+row.names(deblur_table) <- toupper(deblur_table[, 1])  # name rows by sequence
 deblur_table <- deblur_table[, -1]  # remove sequence column
 deblur_table <- deblur_table[, order(colnames(deblur_table))]
 head(deblur_table)
@@ -100,7 +101,7 @@ head(dada2_table)
 
 # load UCLUST representative sequences
 uclust_seqs <- readDNAStringSet(file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta"))
-uclust_seqs <- sapply(uclust_seqs, FUN = toString)
+uclust_seqs <- as.character(uclust_seqs)
 names(uclust_seqs) <- sapply(str_split(names(uclust_seqs), " "), `[`, 1)
 names(uclust_seqs) <- str_replace(names(uclust_seqs), "denovo", "denovo_")
 uclust_taxa <- assignTaxonomy(uclust_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
@@ -108,6 +109,7 @@ uclust_names <- names(row.names(uclust_taxa))   # get UCLUST OTU names
 uclust_seqs <- unname(row.names(uclust_taxa))   # get UCLUST OTU sequences
 row.names(uclust_taxa) <- uclust_names          # rename rows by OTU names instead of sequences
 uclust_taxa <- cbind(uclust_seqs, uclust_taxa)  # add sequences to taxonomy matrix
+colnames(uclust_taxa)[1] <- "sequence"
 uclust_taxa[1:5,]
 write.table(uclust_taxa, file = file.path(result_path, "uclust/uclust_taxa.txt"), quote = FALSE, sep = "\t")
 
@@ -120,6 +122,7 @@ uparse_names <- names(row.names(uparse_taxa))   # get UPARSE OTU names
 uparse_seqs <- unname(row.names(uparse_taxa))   # get UPARSE OTU sequences
 row.names(uparse_taxa) <- uparse_names          # rename rows by OTU names instead of sequences
 uparse_taxa <- cbind(uparse_seqs, uparse_taxa)  # add sequences to taxonomy matrix
+colnames(uparse_taxa)[1] <- "sequence"
 uparse_taxa[1:5,]
 write.table(uparse_taxa, file = file.path(result_path, "uparse/uparse_taxa.txt"), quote = FALSE, sep = "\t")
 
@@ -132,12 +135,14 @@ unoise_names <- names(row.names(unoise_taxa))   # get UNOISE ZOTU names
 unoise_seqs <- unname(row.names(unoise_taxa))   # get UNOISE ZOTU sequences
 row.names(unoise_taxa) <- unoise_names          # rename rows by ZOTU names instead of sequences
 unoise_taxa <- cbind(unoise_seqs, unoise_taxa)  # add sequences to taxonomy matrix
+colnames(unoise_taxa)[1] <- "sequence"
 unoise_taxa[1:5,]
 write.table(unoise_taxa, file = file.path(result_path, "unoise/unoise_taxa.txt"), quote = FALSE, sep = "\t")
 
 # load MED sequences
 med_seqs <- readDNAStringSet(file.path(result_path, "med/NODE-REPRESENTATIVES.fasta"))
 med_seqs <- sapply(med_seqs, FUN = toString)
+med_seqs <- sapply(med_seqs, FUN = str_replace, "-+", "")
 names(med_seqs) <- sapply(str_split(names(med_seqs), "\\|"), FUN = `[`, 1)  # remove size annotation
 names(med_seqs) <- paste0("Node_", names(med_seqs))
 med_taxa <- assignTaxonomy(med_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
@@ -145,6 +150,7 @@ med_names <- names(row.names(med_taxa))   # get MED node names
 med_seqs <- unname(row.names(med_taxa))   # get MED node sequences
 row.names(med_taxa) <- med_names          # rename rows by node names instead of sequences
 med_taxa <- cbind(med_seqs, med_taxa)     # add sequences to taxonomy matrix
+colnames(med_taxa)[1] <- "sequence"
 med_taxa[1:5,]
 write.table(med_taxa, file = file.path(result_path, "med/med_taxa.txt"), quote = FALSE, sep = "\t")
 
@@ -158,6 +164,7 @@ row.names(deblur_table) <- deblur_names   # rename table rows with sOTU IDs inte
 write.table(deblur_table, file = file.path(result_path, "deblur/deblur_table.txt"), quote = FALSE, sep = "\t")
 row.names(deblur_taxa) <- deblur_names    # rename taxonomy matrix rows with sOTU IDs
 deblur_taxa <- cbind(deblur_seqs, deblur_taxa)  # add sequences to taxonomy matrix
+colnames(deblur_taxa)[1] <- "sequence"
 deblur_taxa[1:5,]
 write.table(deblur_taxa, file = file.path(result_path, "deblur/deblur_taxa.txt"), quote = FALSE, sep = "\t")
 
@@ -169,8 +176,143 @@ row.names(dada2_table) <- dada2_names   # rename table rows with ASV IDs instead
 write.table(dada2_table, file = file.path(result_path, "dada2/dada2_table.txt"), quote = FALSE, sep = "\t")
 row.names(dada2_taxa) <- dada2_names    # rename taxonomy matrix rows with ASV IDs
 dada2_taxa <- cbind(dada2_seqs, dada2_taxa)   # add sequences to taxonomy matrix
+colnames(dada2_taxa)[1] <- "sequence"
 dada2_taxa[1:5,]
 write.table(dada2_taxa, file = file.path(result_path, "dada2/dada2_taxa.txt"), quote = FALSE, sep = "\t")
 
+```
+
+Add sequences to OTU tables
+```{r}
+
+uclust_table$sequence <- uclust_taxa[row.names(uclust_table), "uclust_seqs"]
+uparse_table$sequence <- uparse_taxa[row.names(uparse_table), "uparse_seqs"]
+unoise_table$sequence <- unoise_taxa[row.names(unoise_table), "unoise_seqs"]
+med_table$sequence <- med_taxa[row.names(med_table), "med_seqs"]
+deblur_table$sequence <- deblur_taxa[row.names(deblur_table), "deblur_seqs"]
+dada2_table$sequence <- dada2_taxa[row.names(dada2_table), "dada2_seqs"]
+
+```
+
+Remove singletons.
+```{r}
+
+# remove rows with only a single observation
+uclust_table <- uclust_table[rowSums(uclust_table[, sample_names]) > 1, ]
+uparse_table <- uparse_table[rowSums(uparse_table[, sample_names]) > 1, ]
+unoise_table <- unoise_table[rowSums(unoise_table[, sample_names]) > 1, ]
+med_table <- med_table[rowSums(med_table[, sample_names]) > 1, ]
+deblur_table <- deblur_table[rowSums(deblur_table[, sample_names]) > 1, ]
+dada2_table <- dada2_table[rowSums(dada2_table[, sample_names]) > 1, ]
+
+
+```
+
+Combine all sequences into a data frame
+```{r}
+
+dada2.dil <- t(dada2_table[, dilutions])
+colnames(dada2.dil) <- dada2_table$sequence
+
+
+all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
+                     deblur_table$sequence, dada2_table$sequence))
+all_seq_tab <- matrix(0, ncol = length(all_seqs), nrow = 6)
+colnames(all_seq_tab) <- all_seqs
+rownames(all_seq_tab) <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
+all_seq_tab <- collapseNoMismatch(all_seq_tab)
+
+```
+
+Read in reference sequences, and compute Levenshtein ("Hamming") distances between all inferred sequences and all reference sequences.
+```{r}
+
+ref_path <- "~/projects/thesis/data/references"
+zymo_path <- file.path(ref_path, "zymo_SSU")
+ref_fastas <- list.files(zymo_path, pattern = "_16S.fasta$")
+
+ref_seqs <- DNAStringSet()
+for (f in ref_fastas){
+  ref_seqs <- append(ref_seqs, readDNAStringSet(file.path(zymo_path, f)))
+}
+ref_seqs <- as.character(ref_seqs)
+
+levDist <- Vectorize(function(query, ref, ...) {
+  mmi <- dada2:::nweval(query, ref, ...)    # this gives matches, mismatches, and indels
+  ldist <- mmi[2] + mmi[3]
+  if (nchar(query) > sum(mmi)) {    # query not fully overlapped by reference
+    ldist <- nchar(query) - mmi[1]  # include non-overlapped nucleotides in distance
+  }
+  return(ldist)
+})
+
+dada2_to_ref <- outer(dada2_table$sequence, ref_seqs, levDist, band = -1)
+row.names(dada2_to_ref) <- row.names(dada2_table)
+dada2_table$dist_to_ref <- apply(dada2_to_ref, 1, min)
+
+```
+
+How many reference strains were detected at each dilution?
+```{r}
+
+# DADA2
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s160.MC.Neat > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s161.MC.1.3 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s162.MC.1.9 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s163.MC.1.27 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s164.MC.1.81 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s165.MC.1.243 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s166.MC.1.729 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s167.MC.1.2187 > 0)
+sum(dada2_table$dist_to_ref == 0 & dada2_table$s168.MC.1.6561 > 0)
+
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s160.MC.Neat > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s161.MC.1.3 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s162.MC.1.9 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s163.MC.1.27 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s164.MC.1.81 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s165.MC.1.243 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s166.MC.1.729 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s167.MC.1.2187 > 0)
+sum(dada2_table$dist_to_ref > 0 & dada2_table$s168.MC.1.6561 > 0)
+
+```
+
+Write a function to find sequences that differ by 1 (or 2 or 3) necleotides from a more abundant reference sequence.
+```{r}
+
+# make sure that seq_table input to this function doesn't contain sequences that match except for length differences
+
+findNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
+  if (max(colSums(dist_mat == 0)) > 1) {
+    print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
+    print("This may result in inaccurate counts of noisy seuqences.")
+  }
+  
+  if (sum(sapply(seq_table, class) != "integer") > 0){
+    stop("The sequence table must only contain column vectors of type 'integer'.")
+  }
+  
+  rmat <- matrix(0, nrow = ncol(seq_table), ncol = (max_dist - min_dist) + 1, 
+                 dimnames = list(colnames(seq_table), paste(min_dist:max_dist, "off")))
+  
+  for (n in min_dist:max_dist){
+    no_ind <- which(dist_mat == n, arr.ind = TRUE)
+    if (length(no_ind) > 0){
+      ref_row <- apply(as.matrix(dist_mat[, no_ind[, "col"] ]) == 0, 2, which)
+      no_ind <- cbind(no_ind, ref_row)
+      is_no <- ( (seq_table[no_ind[, "row"], ] > 0) & (seq_table[no_ind[, "row"], ] < seq_table[no_ind[, "ref_row"], ]) ) * 1
+      row.names(is_no) <- row.names(no_ind)
+      is_no <- aggregate(is_no, by = list(row.names(is_no)), FUN = max)
+      row.names(is_no) <- is_no$Group.1
+      is_no <- is_no[, -1]
+      rmat[, n] <- colSums(is_no)
+    }
+    else rmat[, n] <- integer(nrow(rmat))
+  }
+  
+  return(rmat)
+  
+}
 ```
 
