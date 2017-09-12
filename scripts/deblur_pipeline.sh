@@ -6,9 +6,9 @@
 ### recommended usage (see github.com/biocore/deblur).
 
 # Set the default input file and output directory
-INFILE=~/projects/thesis/data/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/projects/thesis/results/deblur
-REF_FILE=~/projects/thesis/data/references/silva_nr_v128_prokaryotes.fa
+INFILE=~/projects/thesis/data/dilution_w_blank/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/projects/thesis/results/dilution_w_blank/deblur
+REF_FILE=~/projects/thesis/references/silva_nr_v128_prokaryotes.fa
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -48,20 +48,28 @@ printf "\nRunning the deblur workflow...\n"
 deblur workflow --seqs-fp $INFILE \
        --output-dir $OUTDIR \
        -t 230 \
-       --pos-ref-fp $REF_FILE \
        --log-file $OUTDIR/deblur.log \
        --overwrite
+#       --pos-ref-fp $REF_FILE
 
 # Convert the .biom files to .txt files
-biom convert -i $OUTDIR/reference-hit.biom \
-     -o $OUTDIR/reference-hit.txt \
-     --to-tsv
-biom convert -i $OUTDIR/reference-non-hit.biom \
-     -o $OUTDIR/reference-non-hit.txt \
-     --to-tsv
-biom convert -i $OUTDIR/all.biom \
-     -o $OUTDIR/all.txt \
-     --to-tsv
+if [ $(stat -c %s $OUTDIR/reference-hit.seqs.fa) != 0 ]; then
+    biom convert -i $OUTDIR/reference-hit.biom \
+	 -o $OUTDIR/reference-hit.txt \
+	 --to-tsv
+fi
+
+if [ $(stat -c %s $OUTDIR/reference-non-hit.seqs.fa) != 0 ]; then
+    biom convert -i $OUTDIR/reference-non-hit.biom \
+	 -o $OUTDIR/reference-non-hit.txt \
+	 --to-tsv
+fi
+
+if [ $(stat -c %s $OUTDIR/all.seqs.fa) != 0 ]; then
+    biom convert -i $OUTDIR/all.biom \
+	 -o $OUTDIR/all.txt \
+	 --to-tsv
+fi
 
 #Deactivate the deblur environmnet
 source deactivate
