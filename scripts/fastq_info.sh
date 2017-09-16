@@ -2,9 +2,12 @@
 
 echo "This script generates summary stats on all .fastq files in the current working directory."
 
-mkdir -p ../fastq_info
+if [ ! -d fastq_info ]; then
+    mkdir fastq_info
+fi
 
 for fq in *.fastq
 do
-  usearch -fastx_info $fq -output ../fastq_info/$fq
+    bn=$(basename $fq .fastq)
+    usearch -fastx_info $fq -output fastq_info/$bn"_info.txt"
 done
