@@ -32,6 +32,12 @@ do
 	-w|--working_dir)
 	    WDIR="$2"
 	    shift;;
+	-f|--ftrunc)
+	    FTRUNC="$2"
+	    shift;;
+	-r|--rtrunc)
+	    RTRUNC="$2"
+	    shift;;
 	-m|--maxdiffs)
 	    MAXDIFFS="$2"
 	    shift;;
@@ -51,7 +57,10 @@ do
 	    MAXNS="$2"
 	    shift;;
 	-h|--help)
-	    printf "USAGE: merge_and_filter -i input_directory -o output_directory [OPTIONS]\n"
+	    printf "\nUSAGE: merge_and_filter [-w working_directory] [-m max_merge_differences]\n"
+	    printf "\t\t\t [-p min_merge_pct_id] [-s min_merge_length]\n"
+	    printf "\t\t\t [-l max_merge_length] [-e max_expected_errors]\n"
+	    printf "\t\t\t [-n max_Ns]\n\n"
 	    exit;;
 	*)
 
@@ -97,7 +106,7 @@ fi
 
 # First, run the .Rmd script that truncates the .fastq reads
 #rmd2r.R -i ~/projects/thesis/noisy-microbes/scripts/fastq_truncate.Rmd
-Rscript $SCRIPTS/fastq_truncate.R -d $WDIR
+Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -r $RTRUNC
 
 ### Merge reads from individual samples to get stats for publication
 for fq in $(ls $WDIR/truncated/*_R1.fastq)
