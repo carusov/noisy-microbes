@@ -33,6 +33,10 @@ option_list = list(
               help = "data directory", metavar = NULL),
   make_option(c("-o", "--output"), type = "character", default = NULL,
               help = "results directory", metavar = NULL),
+  make_option(c("-f", "--ftrunc"), type = "integer", default = 230,
+              help = "forward read truncate position"),
+  make_option(c("-r", "--rtrunc"), type = "integer", default = 210,
+              help = "reverse read truncate position"),
   make_option(c("-s", "--min_len"), type = "integer", default = 230, 
               help = "minimum merged length"),
   make_option(c("-l", "--max_len"), type = "integer", default = 235,
@@ -57,15 +61,12 @@ filt_path <- file.path(dada2_path, "filtered")     # directory where filtered re
 if (!file_test("-d", dada2_path)) dir.create(dada2_path)
 if (!file_test("-d", filt_path)) dir.create(filt_path)
 
-#load(file.path(dada2_path, "dada2.RData"))
-#load(file.path(dada2_path, "tables.RData"))
-
 ```
 
 
 ##Filtering and Trimming
 
-First, I want to look at the quality profiles of forward and reverse reads separately.
+Get raw data file names, split them into forward and reverse read files, and infer sample names from the file names.
 ```{r plot qualities}
 
 #setwd(raw_path)
@@ -89,7 +90,7 @@ filt_Rs <- paste0(sample_names, "_R2_filt.fastq")
 # Filter paired read sets
 filt_stats <- filterAndTrim(fwd = file.path(raw_path, fastq_Fs), filt = file.path(filt_path, filt_Fs),
                             rev = file.path(raw_path, fastq_Rs), filt.rev = file.path(filt_path, filt_Rs),
-                            truncLen = c(230, 210), trimLeft = 10, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
+                            truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = 10, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
                             compress = TRUE, verbose = TRUE, multithread = TRUE)
 
 ```
@@ -105,13 +106,6 @@ err_R <- learnErrors(file.path(filt_path, filt_Rs), multithread = TRUE)
 
 ```
 
-Let's take a look at the learned errors.
-```{r plot errors}
-
-# plotErrors(dada_Fs.lrn[[1]], nominalQ = TRUE)
-# plotErrors(dada_Rs.lrn[[1]], nominalQ = TRUE)
-
-```
 
 ##Dereplication
 
@@ -120,9 +114,6 @@ Collapse sequence replicates into single sequences, each with a summary of the q
 
 derep_Fs <- derepFastq(file.path(filt_path, filt_Fs), verbose = TRUE)
 derep_Rs <- derepFastq(file.path(filt_path, filt_Rs), verbose = TRUE)
-
-names(derep_Fs) <- sample_names
-names(derep_Rs) <- sample_names
 
 ```
 
@@ -146,7 +137,7 @@ save(err_F, err_R, derep_Fs, derep_Rs, dada_Fs, dada_Rs, file = file.path(dada2_
 Like it says, now I'm going to merge the paired reads. This will reduce the number of spurious sequences.
 ```{r merge SVs}
 
-load(file = file.path(dada2_path, "dada2.RData"))
+#load(file = file.path(dada2_path, "dada2.RData"))
 mergers <- mergePairs(dada_Fs, derep_Fs, dada_Rs, derep_Rs, 
                      propagateCol = c("n0", "n1", "birth_fold", "birth_ham"), 
                      verbose = TRUE)
@@ -160,8 +151,6 @@ This converts the inferred sequence data into a table, similar to an OTU table.
 ```{r sequence table}
 
 sv_table <- makeSequenceTable(mergers)
-dim(sv_table)
-
 table(nchar(getSequences(sv_table)))
 
 ```
@@ -184,13 +173,9 @@ DADA2 only considers "bimeras", or chimeras spawned from exactly two parents seq
 ```{r remove chimeras}
 
 sv_table.no_chim <- removeBimeraDenovo(sv_table, method = "consensus", verbose = TRUE)
-dim(sv_table.no_chim)
 
 #check what percentage of reads remain
 sum(sv_table.no_chim) / sum(sv_table)
-
-#how many sequence variants are in each sample?
-rowSums(sv_table.no_chim > 0)
 
 ```
 
@@ -201,7 +186,11 @@ See how many reads were retained or discarded at each stage of processing.
 ```{r track reads}
 
 getN <- function(x) sum(getUniques(x))
-track_table <- cbind(filt_stats, sapply(dada_Fs, getN), sapply(mergers, getN), rowSums(sv_table), rowSums(sv_table.no_chim))
+if (length(sample_names) > 1){
+  track_table <- cbind(filt_stats, sapply(dada_Fs, getN), sapply(mergers, getN), rowSums(sv_table), rowSums(sv_table.no_chim))
+} else {
+  track_table <- cbind(filt_stats, getN(dada_Fs), getN(mergers), sum(sv_table), sum(sv_table.no_chim))
+}
 colnames(track_table) <- c("raw", "filtered", "denoised", "merged", "tabled", "non_chim")
 rownames(track_table) <- sample_names
 track_table
