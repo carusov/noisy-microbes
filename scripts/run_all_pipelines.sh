@@ -33,6 +33,12 @@ do
 	-r|--ref)
 	    REFDIR="$2"
 	    shift;;
+	-f|--ftrunc)
+	    FTRUNC="$2"
+	    shift;;
+	-b|--rtrunc)
+	    RTRUNC="$2"
+	    shift;;
 	-s|--min_len)
 	    MIN_LEN="$2"
 	    shift;;
@@ -40,7 +46,9 @@ do
 	    MAX_LEN="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: run_all_pipelines.sh -i input_directory -o output_directory -r reference_directory\n\n"
+	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory] [-o output_directory]\n"
+	    printf "\t\t\t [-r reference_directory] [-s min_merge_length]\n"
+	    printf "\t\t\t [-l max_merge_length]\n\n"
 	    exit;;
 	*)
 
@@ -91,4 +99,4 @@ printf "\nRunning the DADA2 pipeline...\n\n"
 SCRIPTS=~/projects/thesis/noisy-microbes/scripts
 #$SCRIPTS/rmd2r.R -i $SCRIPTS/dada2_pipeline.Rmd -d $SCRIPTS
 Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR \
-	-s $MIN_LEN -l $MAX_LEN
+	-s $MIN_LEN -l $MAX_LEN -f $FTRUNC -r $RTRUNC
