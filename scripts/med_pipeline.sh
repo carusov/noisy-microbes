@@ -50,7 +50,8 @@ o-pad-with-gaps $INFILE \
 
 # Finally, run the MED algorithm on the formatted fasta file   
 printf "Running the MED pipeline..."
-decompose $OUTDIR/pooled_filtered_med.fasta -o $OUTDIR
+decompose $OUTDIR/pooled_filtered_med.fasta -o $OUTDIR \
+	  --skip-check-input-file
 
 # Deactivate the med environment
 source deactivate
