@@ -95,7 +95,8 @@ med_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 # Run the Deblur pipeline
 printf "\nRunning the Deblur pipeline...\n\n"
 deblur_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
-		   -o $OUTDIR/deblur
+		   -o $OUTDIR/deblur \
+		   -t $MIN_LEN
 
 # Run the DADA2 pipeline with defaults
 # First, make sure we have the latest version of the script

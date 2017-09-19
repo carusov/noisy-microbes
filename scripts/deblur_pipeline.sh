@@ -22,6 +22,9 @@ do
 	-o|--output)
 	    OUTDIR="$2"
 	    shift;;
+	-t|--trim)
+	    TRIM="$2"
+	    shift;;
 	-h|--help)
 	    printf "\nUSAGE: deblur_pipeline.sh -i input_file -o output_directory\n\n"
 	    exit;;
@@ -47,7 +50,7 @@ source activate deblur
 printf "\nRunning the deblur workflow...\n"
 deblur workflow --seqs-fp $INFILE \
        --output-dir $OUTDIR \
-       -t 220 \
+       -t $TRIM \
        --log-file $OUTDIR/deblur.log \
        --overwrite
 #       --pos-ref-fp $REF_FILE
