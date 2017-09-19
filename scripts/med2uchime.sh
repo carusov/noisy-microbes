@@ -1,0 +1,26 @@
+# This is a sed script to convert the MED 'NODE-REPRESENTATIVES.fasta'
+# output file to the format required by 'USEARCH -uchime3_denovo'
+
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+
+    case $key in
+	-i|--infile)
+	    INFILE="$2"
+	    shift;;
+	-o|--outfile)
+	    OUTFILE="$2"
+	    shift;;
+	-h|--help)
+	    printf "\nUSAGE: merge_and_filter -i in_file -o out_file\n\n"
+	    exit;;
+	*)
+
+	;;
+    esac
+    shift
+done
+
+sed -r '/^>/ s/\|(size):([0-9]+)/;\1=\2;/' <"$INFILE" >"$OUTFILE"
+sed -ri '/^[^>]/ s/-+//' "$OUTFILE"
