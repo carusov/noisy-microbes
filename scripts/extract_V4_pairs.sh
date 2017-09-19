@@ -47,13 +47,14 @@ do
     shift
 done
 
-fn=$(basename "$FWD")
-bn=${fn%_R1*.fastq}
-ext=${fn#*R1}
+#fn=$(basename "$FWD")
+sn=${FWD%_R1*.fastq}
+ext=${FWD#*R1}
+bn=$(basename $sn)
 
 # Check to see if reverse read was specified
 if [ -z "$REV" ];then
-    REV="$bn"_R2"$ext"
+    REV="$sn"_R2"$ext"
     usearch -fastq_mergepairs "$FWD" \
 	    -fastaout "$bn"_merged.fasta \
 	    -fastq_minmergelen $MIN_LEN \
