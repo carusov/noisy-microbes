@@ -1,0 +1,140 @@
+---
+title: "Taxonomy assignment"
+author: "Vincent Caruso"
+date: "September 18, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This script performs taxonomy assignment for each method being benchmarked, using the DADA2 `assignTaxonomy` function (which in turn is based on the RDP classifier).
+
+First, set up the environment.
+```{r}
+
+library(Biostrings)
+library(dada2)
+
+result_path <- "~/projects/thesis/results/dilution"
+ref_path <- "~/projects/thesis/references"
+
+```
+
+First, the UCLUST representative sequences.
+```{r UCLUST}
+
+# load UCLUST representative sequences
+uclust_seqs <- readDNAStringSet(file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta"))
+uclust_seqs <- as.character(uclust_seqs)
+names(uclust_seqs) <- sapply(str_split(names(uclust_seqs), " "), `[`, 1)
+names(uclust_seqs) <- str_replace(names(uclust_seqs), "denovo", "denovo_")  # make names more readable
+
+# assign taxonomy
+uclust_taxa <- assignTaxonomy(uclust_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"), multithread = TRUE)
+
+# reformat table
+row.names(uclust_taxa) <- names(row.names(uclust_taxa))   # rename rows by OTU names instead of sequences
+uclust_taxa <- cbind(sequence = uclust_seqs, uclust_taxa)
+head(uclust_taxa)
+write.table(uclust_taxa, file = file.path(result_path, "uclust/uclust_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
+Next, the UPARSE representative sequences.
+```{r UPARSE}
+
+# load UPARSE representative sequences
+uparse_seqs <- readDNAStringSet(file.path(result_path, "uparse/otus.fa"))
+uparse_seqs <- as.character(uparse_seqs)
+names(uparse_seqs) <- str_replace(names(uparse_seqs), "OTU", "OTU_")
+
+# assign taxonomy
+uparse_taxa <- assignTaxonomy(uparse_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
+
+# reformat table
+row.names(uparse_taxa) <- names(row.names(uparse_taxa))   # rename rows by OTU names instead of sequences
+uparse_taxa <- cbind(sequence = uparse_seqs, uparse_taxa)
+head(uparse_taxa)
+write.table(uparse_taxa, file = file.path(result_path, "uparse/uparse_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
+Now, the UNOISE zero-radius OTUs.
+```{r UNOISE}
+
+# load UNOISE sequences
+unoise_seqs <- readDNAStringSet(file.path(result_path, "unoise/zotus.fa"))
+unoise_seqs <- as.character(unoise_seqs)
+names(unoise_seqs) <- str_replace(names(unoise_seqs), "OTU", "ZOTU_")
+
+# assign taxonomy
+unoise_taxa <- assignTaxonomy(unoise_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
+row.names(unoise_taxa) <- names(row.names(unoise_taxa))   # rename rows by ZOTU names instead of sequences
+
+# reformat table
+unoise_taxa <- cbind(sequence = unoise_seqs, unoise_taxa)
+head(unoise_taxa)
+write.table(unoise_taxa, file = file.path(result_path, "unoise/unoise_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
+And the MED nodes.
+```{r MED}
+
+# load MED sequences
+med_seqs <- readDNAStringSet(file.path(result_path, "med/uchime/NODE-nonchimeras.fasta"))
+med_seqs <- as.character(med_seqs)
+med_seqs <- sapply(med_seqs, str_replace, "-+", "")
+names(med_seqs) <- paste0("Node_", sapply(str_split(names(med_seqs), ";"), FUN = `[`, 1))  # remove size annotation
+
+# assign taxonomy
+med_taxa <- assignTaxonomy(med_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
+
+# reformat table
+row.names(med_taxa) <- names(row.names(med_taxa))     # rename rows by node names instead of sequences
+med_taxa <- cbind(seqeunce = med_seqs, med_taxa)     # add sequences to taxonomy matrix
+head(med_taxa)
+write.table(med_taxa, file = file.path(result_path, "med/med_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
+And deblur...
+```{r deblur}
+
+# load Deblur sequences
+deblur_seqs <- readDNAStringSet(file.path(result_path, "deblur/all.seqs.fa"))
+deblur_seqs <- as.character(deblur_seqs)
+names(deblur_seqs) <- paste0("sOTU_", 1:length(deblur_seqs))
+
+# assign taxonomy
+deblur_taxa <- assignTaxonomy(deblur_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
+
+# reformat table
+row.names(deblur_taxa) <- names(row.names(deblur_taxa))    # rename taxonomy matrix rows with sOTU IDs
+deblur_taxa <- cbind(sequence = deblur_seqs, deblur_taxa)  # add sequences to taxonomy matrix
+head(deblur_taxa)
+write.table(deblur_taxa, file = file.path(result_path, "deblur/deblur_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
+And finally, DADA2.
+```{r DADA2}
+
+# load DADA2 sequences
+dada2_table <- read.table(file = file.path(result_path, "dada2/sv_table.no_chim.txt"), header = TRUE, sep = "\t")
+dada2_seqs <- colnames(dada2_table)
+names(dada2_seqs) <- paste0("ASV_", 1:length(dada2_seqs))
+
+# assign taxonomy
+dada2_taxa <- assignTaxonomy(dada2_seqs, refFasta = file.path(ref_path, "silva_nr_v128_train_set.fa.gz"))
+
+# reformat table
+row.names(dada2_taxa) <- names(row.names(dada2_taxa))    # rename taxonomy matrix rows with ASV IDs
+dada2_taxa <- cbind(sequence = dada2_seqs, dada2_taxa)   # add sequences to taxonomy matrix
+head(dada2_taxa)
+write.table(dada2_taxa, file = file.path(result_path, "dada2/dada2_taxa.txt"), quote = FALSE, sep = "\t")
+
+```
+
