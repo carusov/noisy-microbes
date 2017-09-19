@@ -13,11 +13,15 @@ SCRIPTS=~/projects/thesis/noisy-microbes/scripts
 # Set the default working directory
 WDIR=~/projects/thesis/data/dilution_w_blank
 
+# Set the default truncation parameters
+FTRUNC=230
+RTRUNC=210
+
 # Set the default merge parameters
 MAXDIFFS=30
 PCTID=50
-MINMERGELEN=230
-MAXMERGELEN=235
+MINMERGELEN=220
+MAXMERGELEN=225
 
 # Set the default filter parameters
 MAXEE=2.0
@@ -35,10 +39,10 @@ do
 	-f|--ftrunc)
 	    FTRUNC="$2"
 	    shift;;
-	-r|--rtrunc)
+	-b|--rtrunc)
 	    RTRUNC="$2"
 	    shift;;
-	-m|--maxdiffs)
+	-d|--maxdiffs)
 	    MAXDIFFS="$2"
 	    shift;;
 	-p|--pctid)
@@ -57,10 +61,11 @@ do
 	    MAXNS="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: merge_and_filter [-w working_directory] [-m max_merge_differences]\n"
-	    printf "\t\t\t [-p min_merge_pct_id] [-s min_merge_length]\n"
-	    printf "\t\t\t [-l max_merge_length] [-e max_expected_errors]\n"
-	    printf "\t\t\t [-n max_Ns]\n\n"
+	    printf "\nUSAGE: merge_and_filter [-w working_directory]\n"
+	    printf "\t\t\t [-f fwd_trunc_pos] [-b rev_trunc_pos]\n"
+	    printf "\t\t\t [-d max_merge_differences] [-p min_merge_pct_id]\n"
+	    printf "\t\t\t [-s min_merge_length] [-l max_merge_length]\n"
+	    printf "\t\t\t [-e max_expected_errors] [-n max_Ns]\n\n"
 	    exit;;
 	*)
 
@@ -80,33 +85,35 @@ printf "\nWORKING DIRECTORY = ""${WDIR}""\n"
 if [ ! -d $WDIR/truncated ]; then
     mkdir $WDIR/truncated
 else
-    rm $WDIR/merged/*.fastq
+    rm $WDIR/truncated/*
 fi
 
 # Create the 'merged' directory, if necessary
 if [ ! -d $WDIR/merged ]; then
     mkdir $WDIR/merged
 else
-    rm $WDIR/merged/*.fastq
+    rm $WDIR/merged/*
 fi
 
 # Create the 'filtered' directory, if necessary
 if [ ! -d $WDIR/filtered ]; then
     mkdir $WDIR/filtered
 else
-    rm $WDIR/filtered/*.fastq
+    rm $WDIR/filtered/*
 fi
 
 # Create the 'reports' directory, if necessary
 if [ ! -d $WDIR/reports ]; then
     mkdir $WDIR/reports
 else
-    rm $WDIR/reports/*.txt
+    rm $WDIR/reports/*
 fi
 
 # First, run the .Rmd script that truncates the .fastq reads
-#rmd2r.R -i ~/projects/thesis/noisy-microbes/scripts/fastq_truncate.Rmd
-Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -r $RTRUNC
+# Make sure we have the latest version of the script
+cd $SCRIPTS
+rmd2r.R -i fastq_truncate.Rmd
+Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -b $RTRUNC
 
 ### Merge reads from individual samples to get stats for publication
 for fq in $(ls $WDIR/truncated/*_R1.fastq)
