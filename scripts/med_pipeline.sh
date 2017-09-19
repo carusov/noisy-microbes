@@ -53,5 +53,19 @@ printf "Running the MED pipeline..."
 decompose $OUTDIR/pooled_filtered_med.fasta -o $OUTDIR \
 	  --skip-check-input-file
 
+# Now check the MED nodes for chimeras using UCHIME
+if [ ! -d "$OUTDIR"/uchime ];then
+    mkdir "$OUTDIR"/uchime
+fi
+
+med2uchime.sh -i "$OUTDIR"/NODE-REPRESENTATIVES.fasta \
+	      -o "$OUTDIR"/uchime/NODE-uchime.fasta
+
+usearch9 -uchime2_denovo "$OUTDIR"/uchime/NODE-uchime.fasta \
+	 -uchimeout "$OUTDIR"/uchime/uchime_tab.txt \
+	 -chimeras "$OUTDIR"/uchime/NODE-chimeras.fasta \
+	 -nonchimeras "$OUTDIR"/uchime/NODE-nonchimeras.fasta \
+	 -abskew 16
+
 # Deactivate the med environment
 source deactivate
