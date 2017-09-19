@@ -14,9 +14,11 @@ INDIR=~/projects/thesis/data/dilution_w_blank
 OUTDIR=~/projects/thesis/results/dilution_w_blank
 REFDIR=~/projects/thesis/references
 
-# Set default 
-MIN_LEN=230
-MAX_LEN=235
+# Set default sequence length and filtering parameters
+MIN_LEN=220
+MAX_LEN=225
+FTRUNC=230
+RTRUNC=210
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -46,9 +48,10 @@ do
 	    MAX_LEN="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory] [-o output_directory]\n"
-	    printf "\t\t\t [-r reference_directory] [-s min_merge_length]\n"
-	    printf "\t\t\t [-l max_merge_length]\n\n"
+	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory]\n"
+	    printf "\t\t\t [-o output_directory] [-r reference_directory]\n"
+	    printf "\t\t\t [-f fwd_trunc_pos] [-b rev_trunc_pos]\n"
+	    printf "\t\t\t [-s min_merge_length] [-l max_merge_length]\n\n"
 	    exit;;
 	*)
 
@@ -95,8 +98,13 @@ deblur_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 		   -o $OUTDIR/deblur
 
 # Run the DADA2 pipeline with defaults
-printf "\nRunning the DADA2 pipeline...\n\n"
+# First, make sure we have the latest version of the script
 SCRIPTS=~/projects/thesis/noisy-microbes/scripts
-#$SCRIPTS/rmd2r.R -i $SCRIPTS/dada2_pipeline.Rmd -d $SCRIPTS
+cd $SCRIPTS
+rmd2r.R -i dada2_pipeline.Rmd
+
+# Now run it
+printf "\nRunning the DADA2 pipeline...\n\n"
 Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR \
-	-s $MIN_LEN -l $MAX_LEN -f $FTRUNC -r $RTRUNC
+	-f $FTRUNC -b $RTRUNC \
+	-s $MIN_LEN -l $MAX_LEN
