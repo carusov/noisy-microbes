@@ -59,7 +59,7 @@ if [ ! -d "$OUTDIR"/uchime ];then
 fi
 
 med2uchime.sh -i "$OUTDIR"/NODE-REPRESENTATIVES.fasta \
-	      -o "$OUTDIR"/uchime/NODE-uchime.fasta
+	      -o "$OUTDIR"/uchime/NODE-REPS-uchime.fasta
 
 usearch9 -uchime2_denovo "$OUTDIR"/uchime/NODE-uchime.fasta \
 	 -uchimeout "$OUTDIR"/uchime/uchime_tab.txt \
