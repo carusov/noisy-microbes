@@ -35,7 +35,7 @@ option_list = list(
               help = "results directory", metavar = NULL),
   make_option(c("-f", "--ftrunc"), type = "integer", default = 230,
               help = "forward read truncate position"),
-  make_option(c("-r", "--rtrunc"), type = "integer", default = 210,
+  make_option(c("-b", "--rtrunc"), type = "integer", default = 210,
               help = "reverse read truncate position"),
   make_option(c("-s", "--min_len"), type = "integer", default = 230, 
               help = "minimum merged length"),
@@ -52,6 +52,7 @@ Next, define the working directory and file paths.
 ```{r paths}
 
 data_path <- opt$input     # parent directory for raw and filtered data
+#result_path <- "~/projects/thesis/results/kozich_130403"
 result_path <- opt$output    # parent directory for outputs of read processsing methods
 #ref_path <- "~/projects/thesis/references"    # directory containing reference databases
 raw_path <- file.path(data_path, "raw")     # directory containing raw read files
@@ -90,7 +91,7 @@ filt_Rs <- paste0(sample_names, "_R2_filt.fastq")
 # Filter paired read sets
 filt_stats <- filterAndTrim(fwd = file.path(raw_path, fastq_Fs), filt = file.path(filt_path, filt_Fs),
                             rev = file.path(raw_path, fastq_Rs), filt.rev = file.path(filt_path, filt_Rs),
-                            truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = 10, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
+                            truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = 15, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
                             compress = TRUE, verbose = TRUE, multithread = TRUE)
 
 ```
