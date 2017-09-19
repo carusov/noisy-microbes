@@ -47,7 +47,7 @@ source activate deblur
 printf "\nRunning the deblur workflow...\n"
 deblur workflow --seqs-fp $INFILE \
        --output-dir $OUTDIR \
-       -t 230 \
+       -t 220 \
        --log-file $OUTDIR/deblur.log \
        --overwrite
 #       --pos-ref-fp $REF_FILE
