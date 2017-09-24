@@ -52,7 +52,7 @@ Next, define the working directory and file paths.
 ```{r paths}
 
 data_path <- opt$input     # parent directory for raw and filtered data
-#result_path <- "~/projects/thesis/results/kozich_130403"
+#result_path <- "~/projects/thesis/results/dilution"
 result_path <- opt$output    # parent directory for outputs of read processsing methods
 #ref_path <- "~/projects/thesis/references"    # directory containing reference databases
 raw_path <- file.path(data_path, "raw")     # directory containing raw read files
@@ -115,6 +115,9 @@ Collapse sequence replicates into single sequences, each with a summary of the q
 
 derep_Fs <- derepFastq(file.path(filt_path, filt_Fs), verbose = TRUE)
 derep_Rs <- derepFastq(file.path(filt_path, filt_Rs), verbose = TRUE)
+
+names(derep_Fs) <- sample_names
+names(derep_Rs) <- sample_names
 
 ```
 
@@ -187,11 +190,13 @@ See how many reads were retained or discarded at each stage of processing.
 ```{r track reads}
 
 getN <- function(x) sum(getUniques(x))
+
 if (length(sample_names) > 1){
   track_table <- cbind(filt_stats, sapply(dada_Fs, getN), sapply(mergers, getN), rowSums(sv_table), rowSums(sv_table.no_chim))
 } else {
   track_table <- cbind(filt_stats, getN(dada_Fs), getN(mergers), sum(sv_table), sum(sv_table.no_chim))
 }
+
 colnames(track_table) <- c("raw", "filtered", "denoised", "merged", "tabled", "non_chim")
 rownames(track_table) <- sample_names
 track_table
