@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 Set up the environment.
-```{r}
+```{r setup}
 
 library(dada2)
 library(stringr)
@@ -204,7 +204,7 @@ dada2_table <- dada2_table[apply(dada2_table[, sample_names], 1, max) > 1, ]
 ```
 
 Add sequences to OTU tables
-```{r}
+```{r add sequences}
 
 # uclust_table$sequence <- uclust_seqs[row.names(uclust_table)]
 # uparse_table$sequence <- uparse_seqs[row.names(uparse_table)]
@@ -712,21 +712,18 @@ isNOff <- function(seq_tab, blast_file, N){
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
   # find full-length hits with one mismatch or indel
-  full <- blast_tab[ blast_tab$aln_length == nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]), ]
-  seq_len <- nchar(seq_tab$sequence[match(full$seqID, seq_tab$id)])
-  #one_off1 <- full[ full$identity != 100 & abs(full$identity - ((seq_len - N) / seq_len) * 100) < 0.01, ]
-  one_off <- full[ (full$mismatches == 1 & full$gaps == 0) | (full$mismatches == 0 & full$gaps == 1), ]   #alternate code
-  
-  # top_hit <- tapply(full$identity, full$seqID, max)
-  # top_hit <- top_hit[match(seq_tab$id, names(top_hit))]
-  # seq_len <- nchar(seq_tab$sequence)
-  # one_off <- (top_hit != 100) & (abs(top_hit - ((seq_len - N) / seq_len) * 100) < 0.01)
+  fulls <- blast_tab[ blast_tab$aln_length == nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]), ]
+  one_offs <- fulls[ (fulls$mismatches == 1 & fulls$gaps == 0) | (fulls$mismatches == 0 & fulls$gaps == 1), ]   #alternate code
   
   # now check length-1 hits with 100% identity
-  partial <- blast_tab[ blast_tab$aln_length == (nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]) - N), ]
-  one_off <- rbind(one_off, partial[partial$identity == 100, ])
+  partials <- blast_tab[ blast_tab$aln_length == (nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]) - N), ]
+  one_offs <- rbind(one_offs, partials[partials$identity == 100, ])
+  is_one_off <- seq_tab$id %in% one_offs$seqID
   
-  return(seq_tab$id %in% one_off$seqID)
+  hits <- isPerfectHit(seq_tab, blast_file)
+  is_one_off[hits] <- FALSE   # remove queries that also have perfect hits
+  
+  return(is_one_off)
 }
 
 ```
