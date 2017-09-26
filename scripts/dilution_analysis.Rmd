@@ -206,13 +206,6 @@ dada2_table <- dada2_table[apply(dada2_table[, sample_names], 1, max) > 1, ]
 Add sequences to OTU tables
 ```{r add sequences}
 
-# uclust_table$sequence <- uclust_seqs[row.names(uclust_table)]
-# uparse_table$sequence <- uparse_seqs[row.names(uparse_table)]
-# unoise_table$sequence <- unoise_seqs[row.names(unoise_table)]
-# med_table$sequence <- med_seqs[row.names(med_table)]
-# deblur_table$sequence <- deblur_seqs[row.names(deblur_table)]
-# dada2_table$sequence <- dada2_seqs[row.names(dada2_table)]
-
 uclust_table$sequence <- uclust_seqs[uclust_table$id]
 uparse_table$sequence <- uparse_seqs[uparse_table$id]
 unoise_table$sequence <- unoise_seqs[unoise_table$id]
@@ -221,13 +214,6 @@ deblur_table$sequence <- deblur_seqs[deblur_table$id]
 dada2_table$sequence <- dada2_seqs[dada2_table$id]
 
 # remove singleton sequences from sequence vectors
-# uclust_seqs <- uclust_seqs[row.names(uclust_table)]
-# uparse_seqs <- uparse_seqs[row.names(uparse_table)]
-# unoise_seqs <- unoise_seqs[row.names(unoise_table)]
-# med_seqs <- med_seqs[row.names(med_table)]
-# deblur_seqs <- deblur_seqs[row.names(deblur_table)]
-# dada2_seqs <- dada2_seqs[row.names(dada2_table)]
-
 uclust_seqs <- uclust_seqs[uclust_table$id]
 uparse_seqs <- uparse_seqs[uparse_table$id]
 unoise_seqs <- unoise_seqs[unoise_table$id]
@@ -262,103 +248,6 @@ levDist <- Vectorize(function(query, ref, ...) {
 
 ```
 
-Combine all sequences into a data frame
-```{r}
-
-#dada2.dil <- t(dada2_table[, dilutions])
-#colnames(dada2.dil) <- dada2_table$sequence
-
-# define a high-, medium-, and low-biomass sample
-high <- str_subset(sample_names, "Neat")
-medium <- str_subset(sample_names, "1.81")
-low <- str_subset(sample_names, "1.729")
-
-# combine sequences from all methods
-methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
-all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
-                     deblur_table$sequence, dada2_table$sequence))
-
-# create a matrix to compare high-biomass samples
-high_st <- matrix(as.integer(0), ncol = length(all_seqs), nrow = 6)
-colnames(high_st) <- all_seqs
-rownames(high_st) <- methods
-
-# populate the matrix with high-biomass abundances
-high_st["uclust", uclust_table$sequence] <- uclust_table[, high]
-high_st["uparse", uparse_table$sequence] <- uparse_table[, high]
-high_st["unoise", unoise_table$sequence] <- unoise_table[, high]
-high_st["med", med_table$sequence] <- med_table[, high]
-high_st["deblur", deblur_table$sequence] <- deblur_table[, high]
-high_st["dada2", dada2_table$sequence] <- dada2_table[, high]
-
-# remove columns (sequences) with all zeros
-high_st <- high_st[, colSums(high_st) > 0]
-
-# collapse sequences that only differ in length
-high_st <- collapseNoMismatch(high_st)
-
-
-# create a matrix to compare medium-biomass samples
-mid_st <- matrix(as.integer(0), ncol = length(all_seqs), nrow = 6)
-colnames(mid_st) <- all_seqs
-rownames(mid_st) <- methods
-
-# populate the matrix with medium-biomass abundances
-mid_st["uclust", uclust_table$sequence] <- uclust_table[, medium]
-mid_st["uparse", uparse_table$sequence] <- uparse_table[, medium]
-mid_st["unoise", unoise_table$sequence] <- unoise_table[, medium]
-mid_st["med", med_table$sequence] <- med_table[, medium]
-mid_st["deblur", deblur_table$sequence] <- deblur_table[, medium]
-mid_st["dada2", dada2_table$sequence] <- dada2_table[, medium]
-
-# remove columns with all zeros
-mid_st <- mid_st[, colSums(mid_st) > 0]
-
-# collapse sequences that only differ in length
-mid_st <- collapseNoMismatch(mid_st)
-
-
-# create a matrix to compare low-biomass samples
-low_st <- matrix(0, ncol = length(all_seqs), nrow = 6)
-colnames(low_st) <- all_seqs
-rownames(low_st) <- methods
-
-# populate the matrix with low-biomass abundances
-low_st["uclust", uclust_table$sequence] <- uclust_table[, low]
-low_st["uparse", uparse_table$sequence] <- uparse_table[, low]
-low_st["unoise", unoise_table$sequence] <- unoise_table[, low]
-low_st["med", med_table$sequence] <- med_table[, low]
-low_st["deblur", deblur_table$sequence] <- deblur_table[, low]
-low_st["dada2", dada2_table$sequence] <- dada2_table[, low]
-
-# remove columns with all zeros
-low_st <- low_st[, colSums(low_st) > 0]
-
-# collapse sequences that only differ in length
-low_st <- collapseNoMismatch(low_st)
-
-```
-
-Compute distances between inferred seqences and reference 16S sequences.
-```{r}
-
-#dada2_to_ref <- outer(dada2_table$sequence, ref_seqs, levDist, band = -1)
-#row.names(dada2_to_ref) <- row.names(dada2_table)
-#dada2_table$dist_to_ref <- apply(dada2_to_ref, 1, min)
-
-# Compute distances from high-biomass sequences to reference
-high_to_ref <- outer(colnames(high_st), ref_seqs, levDist, band = -1)
-row.names(high_to_ref) <- colnames(high_st)
-
-# Compute distances from medium-biomass sequences to reference
-mid_to_ref <- outer(colnames(mid_st), ref_seqs, levDist, band = -1)
-row.names(mid_to_ref) <- colnames(mid_st)
-
-# Compute distances from low-biomass sequences to reference
-low_to_ref <- outer(colnames(low_st), ref_seqs, levDist, band = -1)
-row.names(low_to_ref) <- colnames(low_st)
-
-```
 
 Compute distances of inferred sequences to the reference sequences for each method.
 ```{r compute distances}
@@ -373,76 +262,10 @@ dada2_to_ref <- outer(dada2_seqs, ref_seqs, levDist, band = -1)
 ```
 
 
-How many reference strains were detected by each method at each dilution?
-```{r}
-
-# high biomass
-high_table <- data.frame(t(high_st))
-high_table$sequence <- row.names(high_table)
-high_table$dist_to_ref <- apply(high_to_ref, 1, min)
-high_hits <- colSums(high_table$dist_to_ref == 0 & high_table[, methods] > 0)
-high_pct_hit <- colSums(high_table[high_table$dist_to_ref == 0, methods]) / colSums(high_table[, methods])
-# sum(high_table$dist_to_ref == 0 & high_table$uclust > 0)
-# sum(high_table$dist_to_ref == 0 & high_table$uparse > 0)
-# sum(high_table$dist_to_ref == 0 & high_table$unoise > 0)
-# sum(high_table$dist_to_ref == 0 & high_table$med > 0)
-# sum(high_table$dist_to_ref == 0 & high_table$deblur > 0)
-# sum(high_table$dist_to_ref == 0 & high_table$dada2 > 0)
-
-# medium biomass
-mid_table <- data.frame(t(mid_st))
-mid_table$sequence <- row.names(mid_table)
-mid_table$dist_to_ref <- apply(mid_to_ref, 1, min)
-mid_hits <- colSums(mid_table$dist_to_ref == 0 & mid_table[, methods] > 0)
-mid_pct_hit <- colSums(mid_table[mid_table$dist_to_ref == 0, methods]) / colSums(mid_table[, methods])
-# sum(mid_table$dist_to_ref == 0 & mid_table$uclust > 0)
-# sum(mid_table$dist_to_ref == 0 & mid_table$uparse > 0)
-# sum(mid_table$dist_to_ref == 0 & mid_table$unoise > 0)
-# sum(mid_table$dist_to_ref == 0 & mid_table$med > 0)
-# sum(mid_table$dist_to_ref == 0 & mid_table$deblur > 0)
-# sum(mid_table$dist_to_ref == 0 & mid_table$dada2 > 0)
-
-# low biomass
-low_table <- data.frame(t(low_st))
-low_table$sequence <- row.names(low_table)
-low_table$dist_to_ref <- apply(low_to_ref, 1, min)
-low_hits <- colSums(low_table$dist_to_ref == 0 & low_table[, methods] > 0)
-low_pct_hit <- colSums(low_table[low_table$dist_to_ref == 0, methods]) / colSums(low_table[, methods])
-# sum(low_table$dist_to_ref == 0 & low_table$uclust > 0)
-# sum(low_table$dist_to_ref == 0 & low_table$uparse > 0)
-# sum(low_table$dist_to_ref == 0 & low_table$unoise > 0)
-# sum(low_table$dist_to_ref == 0 & low_table$med > 0)
-# sum(low_table$dist_to_ref == 0 & low_table$deblur > 0)
-# sum(low_table$dist_to_ref == 0 & low_table$dada2 > 0)
-
-# DADA2
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s160.MC.Neat > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s161.MC.1.3 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s162.MC.1.9 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s163.MC.1.27 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s164.MC.1.81 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s165.MC.1.243 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s166.MC.1.729 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s167.MC.1.2187 > 0)
-# sum(dada2_table$dist_to_ref == 0 & dada2_table$s168.MC.1.6561 > 0)
-# 
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s160.MC.Neat > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s161.MC.1.3 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s162.MC.1.9 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s163.MC.1.27 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s164.MC.1.81 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s165.MC.1.243 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s166.MC.1.729 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s167.MC.1.2187 > 0)
-# sum(dada2_table$dist_to_ref > 0 & dada2_table$s168.MC.1.6561 > 0)
-
-```
-
 Write a function to count and identify sequences that differ by only 1 (or 2 or 3) necleotides from a more abundant reference sequence.
 ```{r noisy functions}
 
-# make sure that seq_table input to this function doesn't contain sequences that match except for length differences
-
+# function to generate a table of "noisy"" sequences: those that are very similar to the reference sequences
 countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
   if (max(colSums(dist_mat == 0)) > 1) {
     print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
@@ -458,19 +281,19 @@ countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
   
   for (n in min_dist:max_dist){
     mins <- apply(dist_mat, 1, min)   
-    no_ind <- which(dist_mat == n, arr.ind = TRUE)  
-    no_ind <- no_ind[dist_mat[no_ind] == mins[no_ind[, "row"]], ]   # make sure it's a minimum distance
+    noisy_ind <- which(dist_mat == n, arr.ind = TRUE)  
+    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], ]   # make sure it's a minimum distance
     
-    if (length(no_ind) > 0){
-      ref_row <- apply(as.matrix(dist_mat[, no_ind[, "col"] ]) == 0, 2, which)  # get nearest sequence that matches reference
-      no_ind <- cbind(no_ind, ref_row)
-      is_no <- ( (seq_table[no_ind[, "row"], ] > 0) & 
-                   (seq_table[no_ind[, "row"], ] < seq_table[no_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
-      row.names(is_no) <- row.names(no_ind)
-      is_no <- aggregate(is_no, by = list(row.names(is_no)), FUN = max)
-      row.names(is_no) <- is_no$Group.1
-      is_no <- is_no[, -1]
-      rmat[, n] <- colSums(is_no)
+    if (length(noisy_ind) > 0){
+      ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)  # get nearest sequence that matches reference
+      noisy_ind <- cbind(noisy_ind, ref_row)
+      is_n_off <- ( (seq_table[noisy_ind[, "row"], ] > 0) & 
+                   (seq_table[noisy_ind[, "row"], ] < seq_table[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
+      row.names(is_n_off) <- row.names(noisy_ind)
+      is_n_off <- aggregate(is_n_off, by = list(row.names(is_n_off)), FUN = max)
+      row.names(is_n_off) <- is_n_off$Group.1
+      is_n_off <- is_n_off[, -1]
+      rmat[, n] <- colSums(is_n_off)
     }
     else rmat[, n] <- integer(nrow(rmat))
   }
@@ -500,43 +323,8 @@ isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
 
 ```
 
-Compute summary stats and write summary tables to files.
-```{r}
 
-# high_table[, methods] <- sapply(high_table[, methods], as.integer)
-# mid_table[, methods] <- sapply(mid_table[, methods], as.integer)
-# low_table[, methods] <- sapply(low_table[, methods], as.integer)
-
-# find noisy sequences in each biomass category
-high_noisy <- countNoisySeqs(high_table[, methods], high_to_ref, 1, 3)
-mid_noisy <- countNoisySeqs(mid_table[, methods], mid_to_ref, 1, 3)
-low_noisy <- countNoisySeqs(low_table[, methods], low_to_ref, 1, 3)
-
-# count sequences in each method that are non-hits and not "noisy"
-high_other <- colSums(high_table$dist_to_ref > 3 & high_table[, methods] > 0)
-high_counts <- colSums(high_table[, methods] > 0)
-high_summary <- data.frame(method = methods, total = high_counts, hits = high_hits, 
-                           high_noisy, other = high_other, hit_rate = high_pct_hit,
-                           row.names = NULL, check.names = FALSE)
-write.table(high_summary, file = file.path(analysis_path, "high_summary.txt"), quote = FALSE, sep = "\t", row.names = FALSE)
-
-mid_other <- colSums(mid_table$dist_to_ref > 3 & mid_table[, methods] > 0)
-mid_counts <- colSums(mid_table[, methods] > 0)
-mid_summary <- data.frame(method = methods, total = mid_counts, hits = mid_hits, 
-                          mid_noisy, other = mid_other, hit_rate = mid_pct_hit,
-                          row.names = NULL, check.names = FALSE)
-write.table(mid_summary, file = file.path(analysis_path, "mid_summary.txt"), quote = FALSE, sep = "\t", row.names = FALSE)
-
-low_other <- colSums(low_table$dist_to_ref > 3 & low_table[, methods] > 0)
-low_counts <- colSums(low_table[, methods] > 0)
-low_summary <- data.frame(method = methods, total = low_counts, hits = low_hits, 
-                          low_noisy, other = low_other, hit_rate = low_pct_hit,
-                          row.names = NULL, check.names = FALSE)
-write.table(low_summary, file = file.path(analysis_path, "low_summary.txt"), quote = FALSE, sep = "\t", row.names = FALSE)
-
-```
-
-Now, compute the above summary tables by sample (for all 9 dilutions).
+Now, compute summary tables by sample (for all 9 dilutions).
 ```{r compute sample tables}
 
 # combine sequences from all methods
@@ -555,12 +343,6 @@ for (i in seq_along(sample_names)){
   rownames(sample_st) <- methods
   
   # populate the table with sample abundances
-  # sample_st["uclust", uclust_table$sequence] <- uclust_table[, sample_names[i]]
-  # sample_st["uparse", uparse_table$sequence] <- uparse_table[, sample_names[i]]
-  # sample_st["unoise", unoise_table$sequence] <- unoise_table[, sample_names[i]]
-  # sample_st["med", med_table$sequence] <- med_table[, sample_names[i]]
-  # sample_st["deblur", deblur_table$sequence] <- deblur_table[, sample_names[i]]
-  # sample_st["dada2", dada2_table$sequence] <- dada2_table[, sample_names[i]]
   sample_st["uclust", uclust_table$sequence] <- uclust_table[[ sample_names[i] ]]
   sample_st["uparse", uparse_table$sequence] <- uparse_table[[ sample_names[i] ]]
   sample_st["unoise", unoise_table$sequence] <- unoise_table[[ sample_names[i] ]]
@@ -632,6 +414,13 @@ med_table$noisy <- isNoisy(med_table, med_to_ref, 1, 3)
 deblur_table$noisy <- isNoisy(deblur_table, deblur_to_ref, 1, 3)
 dada2_table$noisy <- isNoisy(dada2_table, dada2_to_ref, 1, 3)
 
+uclust_table$ref_like <- uclust_table$hit | uclust_table$noisy
+uparse_table$ref_like <- uparse_table$hit | uparse_table$noisy
+unoise_table$ref_like <- unoise_table$hit | unoise_table$noisy
+med_table$ref_like <- med_table$hit | med_table$noisy
+deblur_table$ref_like <- deblur_table$hit | deblur_table$noisy
+dada2_table$ref_like <- dada2_table$hit | dada2_table$noisy
+
 ```
 
 BLAST remaining sample sequences against nt.
@@ -699,7 +488,7 @@ Define functions to identify blast hits that are exact matches and those that ar
 ```{r blast parsing functions}
 
 isPerfectHit <- function(seq_tab, blast_file){
-  blast_tab <- as.tibble(read.table(file.path(analysis_path, blast_file), sep = "\t", comment.char = "#",
+  blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
   perfect_hits <- blast_tab[ (blast_tab$identity == 100) & 
@@ -708,7 +497,7 @@ isPerfectHit <- function(seq_tab, blast_file){
 }
 
 isNOff <- function(seq_tab, blast_file, N){
-  blast_tab <- as.tibble(read.table(file.path(analysis_path, blast_file), sep = "\t", comment.char = "#",
+  blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
   # find full-length hits with one mismatch or indel
@@ -728,21 +517,32 @@ isNOff <- function(seq_tab, blast_file, N){
 
 ```
 
-Check samples for exact and one-off BLAST hits.
-```{r}
-
-high_table$exact <- isPerfectHit(high_table, blast_table)
-high_table$one_off <- isNOff(high_table, blast_table, 1)
-
-```
-
 
 Annotate sequence tables with results from BLAST analysis.
 ```{r annotate sequence tables}
 
-#dada2_table$id <- row.names(dada2_table)
-dada2_table$perfect <- isPerfectHit(dada2_table, "dada2_blast.txt") & !dada2_table$hit
-dada2_table$one_off <- isNOff(dada2_table, "dada2_blast.txt", 1)
+uclust_table$perfect <- isPerfectHit(uclust_table, file.path(analysis_path, "uclust_blast.txt")) & !uclust_table$hit
+uclust_table$one_off <- isNOff(uclust_table, file.path(analysis_path, "uclust_blast.txt"), 1)
+uclust_table <- uclust_table %>% mutate(contaminant = perfect | one_off)
+
+uparse_table$perfect <- isPerfectHit(uparse_table, file.path(analysis_path, "uparse_blast.txt")) & !uparse_table$hit
+uparse_table$one_off <- isNOff(uparse_table, file.path(analysis_path, "uparse_blast.txt"), 1)
+uparse_table <- uparse_table %>% mutate(contaminant = perfect | one_off)
+
+unoise_table$perfect <- isPerfectHit(unoise_table, file.path(analysis_path, "unoise_blast.txt")) & !unoise_table$hit
+unoise_table$one_off <- isNOff(unoise_table, file.path(analysis_path, "unoise_blast.txt"), 1)
+unoise_table <- unoise_table %>% mutate(contaminant = perfect | one_off)
+
+med_table$perfect <- isPerfectHit(med_table, file.path(analysis_path, "med_blast.txt")) & !med_table$hit
+med_table$one_off <- isNOff(med_table, file.path(analysis_path, "med_blast.txt"), 1)
+med_table <- med_table %>% mutate(contaminant = perfect | one_off)
+
+deblur_table$perfect <- isPerfectHit(deblur_table, file.path(analysis_path, "deblur_blast.txt")) & !deblur_table$hit
+deblur_table$one_off <- isNOff(deblur_table, file.path(analysis_path, "deblur_blast.txt"), 1)
+deblur_table <- deblur_table %>% mutate(contaminant = perfect | one_off)
+
+dada2_table$perfect <- isPerfectHit(dada2_table, file.path(analysis_path, "dada2_blast.txt")) & !dada2_table$hit
+dada2_table$one_off <- isNOff(dada2_table, file.path(analysis_path, "dada2_blast.txt"), 1)
 dada2_table <- dada2_table %>% mutate(contaminant = perfect | one_off)
 
 # dada2_table <- dada2_table[order(rowSums(dada2_table[, sample_names]), decreasing = T), ]
@@ -754,6 +554,51 @@ dada2_table <- dada2_table %>% mutate(contaminant = perfect | one_off)
 
 Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
+
+uclust_gg <- gather(uclust_table, "sample", "count", one_of(sample_names))
+median_uclust <- median(colSums(uclust_table[, sample_names]))
+uclust_gg <- uclust_gg %>% mutate(log10 = log10(count))
+uclust_gg <- uclust_gg %>% group_by(sample) %>%
+  mutate(norm = count / sum(count), 
+         norm_median = round(norm * median_uclust), 
+         log10_norm = log10(norm_median))
+uclust_gg <- uclust_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
+
+uparse_gg <- gather(uparse_table, "sample", "count", one_of(sample_names))
+median_uparse <- median(colSums(uparse_table[, sample_names]))
+uparse_gg <- uparse_gg %>% mutate(log10 = log10(count))
+uparse_gg <- uparse_gg %>% group_by(sample) %>%
+  mutate(norm = count / sum(count), 
+         norm_median = round(norm * median_uparse), 
+         log10_norm = log10(norm_median))
+uparse_gg <- uparse_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
+
+unoise_gg <- gather(unoise_table, "sample", "count", one_of(sample_names))
+median_unoise <- median(colSums(unoise_table[, sample_names]))
+unoise_gg <- unoise_gg %>% mutate(log10 = log10(count))
+unoise_gg <- unoise_gg %>% group_by(sample) %>%
+  mutate(norm = count / sum(count), 
+         norm_median = round(norm * median_unoise), 
+         log10_norm = log10(norm_median))
+unoise_gg <- unoise_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
+
+med_gg <- gather(med_table, "sample", "count", one_of(sample_names))
+median_med <- median(colSums(med_table[, sample_names]))
+med_gg <- med_gg %>% mutate(log10 = log10(count))
+med_gg <- med_gg %>% group_by(sample) %>%
+  mutate(norm = count / sum(count), 
+         norm_median = round(norm * median_med), 
+         log10_norm = log10(norm_median))
+med_gg <- med_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
+
+deblur_gg <- gather(deblur_table, "sample", "count", one_of(sample_names))
+median_deblur <- median(colSums(deblur_table[, sample_names]))
+deblur_gg <- deblur_gg %>% mutate(log10 = log10(count))
+deblur_gg <- deblur_gg %>% group_by(sample) %>%
+  mutate(norm = count / sum(count), 
+         norm_median = round(norm * median_deblur), 
+         log10_norm = log10(norm_median))
+deblur_gg <- deblur_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
 
 dada2_gg <- gather(dada2_table, "sample", "count", one_of(sample_names))
 median_dada2 <- median(colSums(dada2_table[, sample_names]))
@@ -783,7 +628,7 @@ sample_read_count <- sapply(method_tables, function(st, ss) colSums(st[, ss]), s
   t() %>% as.data.frame() %>% rownames_to_column(var = "method") %>% as.tibble()
 sample_read_count_gg <- gather(sample_read_count, "sample", "reads", -method)
 
-sample_summary <- merge(sample_seq_count_gg, sample_read_count_gg, by = c("method", "sample"))
+sample_summary <- merge(sample_read_count_gg, sample_seq_count_gg, by = c("method", "sample"))
 sample_summary <- sample_summary %>% group_by(method) %>% 
   mutate(seqs_norm_method = round(seqs * median(reads) / reads),
          seqs_norm_raw = round(seqs * median_raw / reads))
@@ -796,7 +641,7 @@ Create plots to show relative strength of signal (reference hits) to noise (non-
 theme_set(theme_bw())
 # ref vs. non-ref boxplots, raw counts
 snr_box <- ggplot(data = dada2_gg) +
-  geom_boxplot(aes(x = sample, y = norm_log10, fill = factor(hit, levels = c(TRUE, FALSE)))) +
+  geom_boxplot(aes(x = sample, y = log10_norm, fill = factor(ref_like, levels = c(TRUE, FALSE)))) +
   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
@@ -806,7 +651,7 @@ snr_box
 
 # ref vs. non-ref violin plots, raw counts
 snr_violin <- ggplot(data = dada2_gg) +
-  geom_violin(aes(x = sample, y = norm_log10, fill = factor(hit, levels = c(T, F)))) +
+  geom_violin(aes(x = sample, y = log10_norm, fill = factor(hit, levels = c(T, F)))) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("purple", "green")) +
@@ -821,10 +666,15 @@ Create plots to show sample composition, colored by reference vs. non-reference.
 
 dada2_gg$id <- factor(dada2_gg$id, levels = dada2_table$id[order(dada2_table$s160.MC.Neat, decreasing = FALSE)])
 dada2_gg <- as.data.frame(dada2_gg)
+dada2_mini <- dada2_gg %>% group_by(sample) %>% slice(seq(1, 20, 2))
 
-comp_bar <- ggplot(dada2_gg, aes(x = sample, y = norm, fill = id, alpha = hit, order = hit)) +
-  geom_col(width = 0.5) +
-  scale_fill_identity() +
+comp_bar <- ggplot(dada2_gg, aes(x = sample, y = count, fill = id, group = hit, alpha = hit)) +
+  geom_col(width = 0.5, position = position_fill()) +
+  #scale_fill_grey() +
+  #scale_fill_manual(values = mypalette(nrow(dada2_gg))) +
+  scale_fill_discrete(h = c(0, 360) + 45, c = 100, l = 45, h.start = 0, direction = 1, na.value = "grey50") +
+  scale_alpha_discrete(range = c(0.25, 1)) +
+  #scale_fill_identity() +
   theme(legend.position = "None")
 comp_bar
 
