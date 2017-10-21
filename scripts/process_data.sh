@@ -65,3 +65,14 @@ merge_and_filter.sh -w $DATA/kozich_130403 \
 run_all_pipelines.sh -i $DATA/kozich_130403 -o $RESULTS/kozich_130403 \
 		     -f 240 -b 220 \
 		     -s 220 -l 225
+
+# Process dataset metaID-46 from D'Amore, et al.
+merge_and_filter.sh -w $DATA/damore_balanced \
+		    -f 250 -b 240 \
+		    -s 258 -l 263 \
+		    -d 30 -p 80 \
+		    -e 2.0 -n 0
+
+run_all_pipelines.sh -i $DATA/damore_balanced -o $RESULTS/damore_balanced \
+		     -f 250 -b 240 \
+		     -s 258 -l 263
