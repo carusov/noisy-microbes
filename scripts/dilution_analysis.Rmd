@@ -19,7 +19,9 @@ library(tidyverse)
 
 result_path <- "~/projects/thesis/results/dilution"
 ref_path <- "~/projects/thesis/references"
-analysis_path <- "~/projects/thesis/analysis"
+analysis_path <- "~/projects/thesis/analysis/dilution"
+
+if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
 ```
 
@@ -235,6 +237,7 @@ for (f in ref_fastas){
   ref_seqs <- append(ref_seqs, readDNAStringSet(file.path(zymo_path, f)))
 }
 ref_seqs <- as.character(ref_seqs)
+species <- sapply(str_split(names(ref_seqs), "_16S"), `[`, 1)
 
 # define a function to compute Levenshtein distances between two sequences
 levDist <- Vectorize(function(query, ref, ...) {
@@ -253,11 +256,41 @@ Compute distances of inferred sequences to the reference sequences for each meth
 ```{r compute distances}
 
 uclust_to_ref <- outer(uclust_seqs, ref_seqs, levDist, band = -1)
+# Collapse distances for strains of the same species (using minimum distance)
+uclust_to_ref_species <- t(aggregate(t(uclust_to_ref), list(species), min))
+colnames(uclust_to_ref_species) <- uclust_to_ref_species[1, ]
+uclust_to_ref_species <- uclust_to_ref_species[-1, ]
+class(uclust_to_ref_species) <- "integer"
+
 uparse_to_ref <- outer(uparse_seqs, ref_seqs, levDist, band = -1)
+uparse_to_ref_species <- t(aggregate(t(uparse_to_ref), list(species), min))
+colnames(uparse_to_ref_species) <- uparse_to_ref_species[1, ]
+uparse_to_ref_species <- uparse_to_ref_species[-1, ]
+class(uparse_to_ref_species) <- "integer"
+
 unoise_to_ref <- outer(unoise_seqs, ref_seqs, levDist, band = -1)
+unoise_to_ref_species <- t(aggregate(t(unoise_to_ref), list(species), min))
+colnames(unoise_to_ref_species) <- unoise_to_ref_species[1, ]
+unoise_to_ref_species <- unoise_to_ref_species[-1, ]
+class(unoise_to_ref_species) <- "integer"
+
 med_to_ref <- outer(med_seqs, ref_seqs, levDist, band = -1)
+med_to_ref_species <- t(aggregate(t(med_to_ref), list(species), min))
+colnames(med_to_ref_species) <- med_to_ref_species[1, ]
+med_to_ref_species <- med_to_ref_species[-1, ]
+class(med_to_ref_species) <- "integer"
+
 deblur_to_ref <- outer(deblur_seqs, ref_seqs, levDist, band = -1)
+deblur_to_ref_species <- t(aggregate(t(deblur_to_ref), list(species), min))
+colnames(deblur_to_ref_species) <- deblur_to_ref_species[1, ]
+deblur_to_ref_species <- deblur_to_ref_species[-1, ]
+class(deblur_to_ref_species) <- "integer"
+
 dada2_to_ref <- outer(dada2_seqs, ref_seqs, levDist, band = -1)
+dada2_to_ref_species <- t(aggregate(t(dada2_to_ref), list(species), min))
+colnames(dada2_to_ref_species) <- dada2_to_ref_species[1, ]
+dada2_to_ref_species <- dada2_to_ref_species[-1, ]
+class(dada2_to_ref_species) <- "integer"
 
 ```
 
@@ -281,8 +314,8 @@ countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
   
   for (n in min_dist:max_dist){
     mins <- apply(dist_mat, 1, min)   
-    noisy_ind <- which(dist_mat == n, arr.ind = TRUE)  
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], ]   # make sure it's a minimum distance
+    noisy_ind <- which(dist_mat == n, arr.ind = TRUE)
+    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
     
     if (length(noisy_ind) > 0){
       ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)  # get nearest sequence that matches reference
@@ -324,72 +357,6 @@ isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
 ```
 
 
-Now, compute summary tables by sample (for all 9 dilutions).
-```{r compute sample tables}
-
-# combine sequences from all methods
-methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
-all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
-                     deblur_table$sequence, dada2_table$sequence))
-
-dilution_table <- list()
-dilution_to_ref <- list()
-dilution_summary <- list()
-
-for (i in seq_along(sample_names)){
-  # create a sequence table for the sample
-  sample_st <- matrix(as.integer(0), ncol = length(all_seqs), nrow = length(methods))
-  colnames(sample_st) <- all_seqs
-  rownames(sample_st) <- methods
-  
-  # populate the table with sample abundances
-  sample_st["uclust", uclust_table$sequence] <- uclust_table[[ sample_names[i] ]]
-  sample_st["uparse", uparse_table$sequence] <- uparse_table[[ sample_names[i] ]]
-  sample_st["unoise", unoise_table$sequence] <- unoise_table[[ sample_names[i] ]]
-  sample_st["med", med_table$sequence] <- med_table[[ sample_names[i] ]]
-  sample_st["deblur", deblur_table$sequence] <- deblur_table[[ sample_names[i] ]]
-  sample_st["dada2", dada2_table$sequence] <- dada2_table[[ sample_names[i] ]]
-
-  # remove columns (sequences) with all zeros
-  sample_st <- sample_st[, colSums(sample_st) > 0]
-  
-  # collapse sequences that only differ in length
-  sample_st <- collapseNoMismatch(sample_st)
-  
-  # Compute distances from high-biomass sequences to reference
-  sample_to_ref <- outer(colnames(sample_st), ref_seqs, levDist, band = -1)
-  row.names(sample_to_ref) <- colnames(sample_st)
-  
-  # Convert to data.frame and annotate sequences
-  sample_table <- data.frame(t(sample_st)) %>% rownames_to_column(var = "seqeunce") %>% as.tibble()
-  sample_table$dist_to_ref <- apply(sample_to_ref, 1, min)
-  sample_table$hit <- sample_table$dist_to_ref == 0
-  sample_table$noisy <- isNoisy(sample_table, sample_to_ref)
-  
-  # Compute summary statistics
-  sample_hits <- colSums(sample_table$hit & sample_table[, methods] > 0)
-  sample_pct_hit <- colSums(sample_table[sample_table$hit, methods]) / colSums(sample_table[, methods])
-  #sample_table[, methods] <- sapply(sample_table[, methods], as.integer)
-  sample_noisy <- countNoisySeqs(sample_table[, methods], sample_to_ref, 1, 3)   # "noisy" sequences
-  sample_other <- colSums(sample_table$dist_to_ref > 3 & sample_table[, methods] > 0)   # non-hits, not "noisy"
-  sample_counts <- colSums(sample_table[, methods] > 0)   # total number of sequences
-  sample_summary <- data.frame(method = methods, total = sample_counts, hits = sample_hits, 
-                             sample_noisy, other = sample_other, hit_rate = sample_pct_hit,
-                             row.names = NULL, check.names = FALSE)
-  
-  dilution_table[[i]] <- sample_table
-  dilution_to_ref[[i]] <- sample_to_ref
-  dilution_summary[[i]] <- sample_summary
-  cat("Done with sample", sample_names[i], "\n")
-}
-
-names(dilution_table) <- sample_names
-names(dilution_to_ref) <- sample_names
-names(dilution_summary) <- sample_names
-
-```
-
-
 Annotate sequences in sequence tables as "noisy" or not.
 ```{r annotate noisy}
 
@@ -420,21 +387,6 @@ unoise_table$ref_like <- unoise_table$hit | unoise_table$noisy
 med_table$ref_like <- med_table$hit | med_table$noisy
 deblur_table$ref_like <- deblur_table$hit | deblur_table$noisy
 dada2_table$ref_like <- dada2_table$hit | dada2_table$noisy
-
-```
-
-BLAST remaining sample sequences against nt.
-```{r}
-
-high_table$id <- paste0("seq_", 1:nrow(high_table))
-high_seqs <- high_table$sequence
-names(high_seqs) <- high_table$id
-high_seqs <- DNAStringSet(high_seqs)
-writeFasta(high_seqs, file.path(analysis_path, "high_seqs.fasta"))
-
-blast_table <- read.table(file.path(analysis_path, "high_blast.txt"), sep = "\t", comment.char = "#",
-                          col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", "gapopens", "gaps",
-                                        "qstart", "qend", "sstart", "send", "evalue", "bitscore"))
 
 ```
 
@@ -496,7 +448,7 @@ isPerfectHit <- function(seq_tab, blast_file){
   return(seq_tab$id %in% perfect_hits$seqID)
 }
 
-isNOff <- function(seq_tab, blast_file, N){
+isNOff <- function(seq_tab, blast_file, N = 1){
   blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
@@ -519,35 +471,164 @@ isNOff <- function(seq_tab, blast_file, N){
 
 
 Annotate sequence tables with results from BLAST analysis.
-```{r annotate sequence tables}
+```{r annotate blast results}
 
 uclust_table$perfect <- isPerfectHit(uclust_table, file.path(analysis_path, "uclust_blast.txt")) & !uclust_table$hit
 uclust_table$one_off <- isNOff(uclust_table, file.path(analysis_path, "uclust_blast.txt"), 1)
-uclust_table <- uclust_table %>% mutate(contaminant = perfect | one_off)
+uclust_table <- uclust_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
 uparse_table$perfect <- isPerfectHit(uparse_table, file.path(analysis_path, "uparse_blast.txt")) & !uparse_table$hit
 uparse_table$one_off <- isNOff(uparse_table, file.path(analysis_path, "uparse_blast.txt"), 1)
-uparse_table <- uparse_table %>% mutate(contaminant = perfect | one_off)
+uparse_table <- uparse_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
 unoise_table$perfect <- isPerfectHit(unoise_table, file.path(analysis_path, "unoise_blast.txt")) & !unoise_table$hit
 unoise_table$one_off <- isNOff(unoise_table, file.path(analysis_path, "unoise_blast.txt"), 1)
-unoise_table <- unoise_table %>% mutate(contaminant = perfect | one_off)
+unoise_table <- unoise_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
 med_table$perfect <- isPerfectHit(med_table, file.path(analysis_path, "med_blast.txt")) & !med_table$hit
 med_table$one_off <- isNOff(med_table, file.path(analysis_path, "med_blast.txt"), 1)
-med_table <- med_table %>% mutate(contaminant = perfect | one_off)
+med_table <- med_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
 deblur_table$perfect <- isPerfectHit(deblur_table, file.path(analysis_path, "deblur_blast.txt")) & !deblur_table$hit
 deblur_table$one_off <- isNOff(deblur_table, file.path(analysis_path, "deblur_blast.txt"), 1)
-deblur_table <- deblur_table %>% mutate(contaminant = perfect | one_off)
+deblur_table <- deblur_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
 dada2_table$perfect <- isPerfectHit(dada2_table, file.path(analysis_path, "dada2_blast.txt")) & !dada2_table$hit
 dada2_table$one_off <- isNOff(dada2_table, file.path(analysis_path, "dada2_blast.txt"), 1)
-dada2_table <- dada2_table %>% mutate(contaminant = perfect | one_off)
+dada2_table <- dada2_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
 
-# dada2_table <- dada2_table[order(rowSums(dada2_table[, sample_names]), decreasing = T), ]
-# dada2_table <- dada2_table[order(dada2_table$hit, decreasing = F), ]
-# dada2_table$order <- 1:nrow(dada2_table)
+# Annotate "consensus" sequences-- that are observed in every sample
+uclust_table$consensus <- apply(uclust_table[, sample_names], 1, min) > 0
+uparse_table$consensus <- apply(uparse_table[, sample_names], 1, min) > 0
+unoise_table$consensus <- apply(unoise_table[, sample_names], 1, min) > 0
+med_table$consensus <- apply(med_table[, sample_names], 1, min) > 0
+deblur_table$consensus <- apply(deblur_table[, sample_names], 1, min) > 0
+dada2_table$consensus <- apply(dada2_table[, sample_names], 1, min) > 0
+
+```
+
+
+Compute summary tables for each method.
+```{r compute method summaries}
+
+method_tables <- list(uclust_table, uparse_table, unoise_table, med_table, deblur_table, dada2_table)
+names(method_tables) <- methods
+dist_tables <- list(uclust_to_ref, uparse_to_ref, unoise_to_ref, med_to_ref, deblur_to_ref, dada2_to_ref)
+names(dist_tables) <- methods
+dist_species_tables <- list(uclust_to_ref_species, uparse_to_ref_species, unoise_to_ref_species, 
+                            med_to_ref_species, deblur_to_ref_species, dada2_to_ref_species)
+names(dist_species_tables) <- methods
+
+method_summary <- list()
+
+for (i in seq_along(methods)){
+  # Compute summary statistics
+  method_hits <- colSums(method_tables[[i]]$hit & method_tables[[i]][, sample_names] > 0)
+  method_species <- integer()
+  for (s in sample_names){
+    s_species <- sum(apply(dist_species_tables[[i]][method_tables[[i]][, s] > 0, ], 2, min) == 0)
+    method_species <- c(method_species, s_species)
+  }
+  method_counts <- colSums(method_tables[[i]][, sample_names] > 0)   # total number of sequences
+  method_noisy <- countNoisySeqs(method_tables[[i]][, sample_names], dist_tables[[i]], 1, 3)   # "noisy" sequences
+  method_perfect <- colSums(method_tables[[i]]$perfect & method_tables[[i]][, sample_names] > 0)  # perfect BLAST hits
+  method_one_off <- colSums(method_tables[[i]]$one_off & method_tables[[i]][, sample_names] > 0)  # one-off
+  method_contaminant <- method_perfect + method_one_off
+  method_other <- colSums(method_tables[[i]]$dist_to_ref > 3 & !method_tables[[i]]$perfect & 
+                            !method_tables[[i]]$one_off & method_tables[[i]][, sample_names] > 0)   # non-hits, not "noisy"
+  method_pct_hit <- colSums(method_tables[[i]][method_tables[[i]]$hit, sample_names]) / colSums(method_tables[[i]][, sample_names])
+  method_pct_noisy <- colSums(method_tables[[i]][method_tables[[i]]$noisy, sample_names]) / colSums(method_tables[[i]][, sample_names])
+  method_pct_cont <- colSums(method_tables[[i]][method_tables[[i]]$contaminant, sample_names]) / colSums(method_tables[[i]][, sample_names])
+  method_pct_other <- colSums(method_tables[[i]][method_tables[[i]]$other, sample_names]) / colSums(method_tables[[i]][, sample_names])
+  m_summary <- data.frame(sample = sample_names, total = method_counts, hits = method_hits, species = method_species,
+                          method_noisy, perfect = method_perfect, one_off = method_one_off, contaminants = method_contaminant,
+                          other = method_other, 
+                          pct_hit = method_pct_hit, pct_noisy = method_pct_noisy, 
+                          pct_cont = method_pct_cont, pct_other = method_pct_other,
+                          row.names = NULL, check.names = FALSE)
+  
+  method_summary[[i]] <- m_summary
+}
+
+names(method_summary) <- methods
+
+all_summary <- do.call("rbind", method_summary) %>% as.tibble %>% mutate(method = rep(methods, each = length(sample_names)))
+
+```
+
+
+Now, compute summary tables by sample (for all 9 dilutions).
+```{r compute sample tables}
+
+# combine sequences from all methods
+methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
+all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
+                     deblur_table$sequence, dada2_table$sequence))
+
+dilution_table <- list()
+dilution_to_ref <- list()
+dilution_summary <- list()
+
+for (i in seq_along(sample_names)){
+  # create a sequence table for the sample
+  sample_st <- matrix(as.integer(0), ncol = length(all_seqs), nrow = length(methods))
+  colnames(sample_st) <- all_seqs
+  rownames(sample_st) <- methods
+  
+  # populate the table with sample abundances
+  sample_st["uclust", uclust_table$sequence] <- uclust_table[[ sample_names[i] ]]
+  sample_st["uparse", uparse_table$sequence] <- uparse_table[[ sample_names[i] ]]
+  sample_st["unoise", unoise_table$sequence] <- unoise_table[[ sample_names[i] ]]
+  sample_st["med", med_table$sequence] <- med_table[[ sample_names[i] ]]
+  sample_st["deblur", deblur_table$sequence] <- deblur_table[[ sample_names[i] ]]
+  sample_st["dada2", dada2_table$sequence] <- dada2_table[[ sample_names[i] ]]
+
+  # remove columns (sequences) with all zeros
+  sample_st <- sample_st[, colSums(sample_st) > 0]
+  
+  # collapse sequences that only differ in length
+  sample_st <- collapseNoMismatch(sample_st)
+  
+  # Compute distances from sample sequences to reference
+  sample_to_ref <- outer(colnames(sample_st), ref_seqs, levDist, band = -1)
+  row.names(sample_to_ref) <- colnames(sample_st)
+  # Collapse distances for strains of the same species (using minimum distance)
+  sample_to_ref_species <- t(aggregate(t(sample_to_ref), list(species), min))
+  colnames(sample_to_ref_species) <- sample_to_ref_species[1, ]
+  sample_to_ref_species <- sample_to_ref_species[-1, ]
+  class(sample_to_ref_species) <- "integer"
+
+  # Convert to data.frame and annotate sequences
+  sample_table <- data.frame(t(sample_st)) %>% rownames_to_column(var = "sequence") %>% as.tibble()
+  sample_table$dist_to_ref <- apply(sample_to_ref, 1, min)
+  sample_table$hit <- sample_table$dist_to_ref == 0
+  sample_table$noisy <- isNoisy(sample_table, sample_to_ref)
+  
+  # Compute summary statistics
+  sample_hits <- colSums(sample_table$hit & sample_table[, methods] > 0)
+  sample_species <- integer()
+  for (m in methods){
+    m_species <- sum(apply(sample_to_ref_species[sample_table[[m]] > 0, ], 1, min) == 0)
+    sample_species <- c(sample_species, m_species)
+  }
+  sample_counts <- colSums(sample_table[, methods] > 0)   # total number of sequences
+  sample_pct_hit <- colSums(sample_table[sample_table$hit, methods]) / colSums(sample_table[, methods])
+  #sample_table[, methods] <- sapply(sample_table[, methods], as.integer)
+  sample_noisy <- countNoisySeqs(sample_table[, methods], sample_to_ref, 1, 3)   # "noisy" sequences
+  sample_other <- colSums(sample_table$dist_to_ref > 3 & sample_table[, methods] > 0)   # non-hits, not "noisy"
+  sample_summary <- data.frame(method = methods, total = sample_counts, hits = sample_hits, species = sample_species,
+                             sample_noisy, other = sample_other, hit_rate = sample_pct_hit,
+                             row.names = NULL, check.names = FALSE)
+  
+  dilution_table[[i]] <- sample_table
+  dilution_to_ref[[i]] <- sample_to_ref
+  dilution_summary[[i]] <- sample_summary
+  cat("Done with sample", sample_names[i], "\n")
+}
+
+names(dilution_table) <- sample_names
+names(dilution_to_ref) <- sample_names
+names(dilution_summary) <- sample_names
 
 ```
 
@@ -609,13 +690,16 @@ dada2_gg <- dada2_gg %>% group_by(sample) %>%
          log10_norm = log10(norm_median))
 dada2_gg <- dada2_gg %>% select(id, sample, count, everything()) %>% select(-sequence, sequence)
 
+all_table <- do.call("rbind", method_tables) %>% mutate(method = rep(methods, times = sapply(method_tables, nrow)))
+all_table <- gather(all_table, "sample", "count", one_of(sample_names)) %>% select(-sequence, id, sample, count, everything())
+
+medians <- all_table %>% group_by(method, sample) %>% summarise(reads = sum(count)) %>% summarise(median_reads = median(reads)) %>%
+  select(median_reads)
+
 ```
 
 Create tables of sequence and read count summaries per sample, and for each method.
 ```{r summary tables}
-
-method_tables <- list(uclust_table, uparse_table, unoise_table, med_table, deblur_table, dada2_table)
-names(method_tables) <- methods
 
 load(file.path(result_path, "dada2/tables.RData"))
 median_raw <- median(track_table[, "raw"])
@@ -633,15 +717,88 @@ sample_summary <- sample_summary %>% group_by(method) %>%
   mutate(seqs_norm_method = round(seqs * median(reads) / reads),
          seqs_norm_raw = round(seqs * median_raw / reads))
 
+# Calculate mean signal strengths of each method's reference and non-reference sequences
+# sample_sn <- lapply(method_tables, function(m){
+#   sn_mean <- m[, sample_names] %>% sapply(., tapply, m$hit, function(x) mean(log10(x[x > 0])))
+#   sn_mean <- as.tibble(rownames_to_column(as.data.frame(sn_mean), var = "hit"))
+#   return(sn_means)
+# })
+sample_sn <- lapply(method_tables, function(m){
+  sn_mean <- m[, sample_names] %>% sapply(., tapply, m$hit, function(x) mean(log10(x[x > 0])))
+  sn_mean <- sn_mean["TRUE", ] / sn_mean["FALSE", ]
+  #sn_mean <- as.tibble(rownames_to_column(as.data.frame(sn_mean), var = "hit"))
+  return(sn_mean)
+})
+sample_sn <- do.call("rbind", sample_sn) %>% as.data.frame %>% rownames_to_column(var = "method") %>% as.tibble
+#sample_sn$hit <- as.logical(sample_sn$hit)
+#sample_sn$method <- rep(methods, each = 2)
+sample_sn_gg <- gather(sample_sn, "sample", "mean_snr", one_of(sample_names))
+sample_sn_gg 
+
+sample_summary <- merge(sample_summary, sample_sn_gg, by = c("method", "sample")) %>% as.tibble()
+
 ```
+
+
+Compute Bray-Curtis similarity between each dilution sample and the neat sample, for each method.
+```{r Bray-Curtis}
+
+# normalize sequence table by median read count per method
+norm_median_tables <- lapply(method_tables, function(table){
+  seq_tab <- table[table$hit, c("id", sample_names)]
+  medn <- median(colSums(seq_tab[, sample_names]))
+  seq_tab[, sample_names] <- sapply(seq_tab[, sample_names], function(x) round(medn * (x / sum(x))))
+  seq_tab <- as.tibble(seq_tab)
+  return(seq_tab)
+})
+
+# compute Bray-Curtis similarity relative to neat sample
+bray_curtis <- lapply(norm_median_tables, function(table){
+  neat <- table[[sample_names[1]]]
+  bc <- sapply(table[, sample_names], function(sample){
+    return(2 * sum(pmin(neat, sample)) / (sum(neat) + sum(sample)))
+  })
+  return(bc)
+})
+
+bray_curtis <- do.call("rbind", bray_curtis) %>% as.tibble() %>% mutate(method = methods) %>% select(method, everything())
+
+```
+
+
+```{r read count histograms}
+
+library(ggridges)
+
+all_table_pos <- all_table %>% filter(sample == sample_names[4], count > 100)
+
+read_hist <- ggplot(all_table_pos, aes(x = count, y = hit)) +
+  geom_density_ridges(aes(fill = hit, height = ..density..), scale = 0.9, stat = "binline", bins = 120, panel_scaling = FALSE) +
+  geom_vline(data = all_table_pos %>% filter(hit) %>% group_by(method) %>% summarise(min = min(count)), aes(xintercept = min)) +
+  facet_wrap(~method) +
+  scale_fill_brewer(palette = "Dark2")
+read_hist
+
+```
+
 
 Create plots to show relative strength of signal (reference hits) to noise (non-reference hits).
 ```{r snr plots}
 
+all_table <- all_table %>% group_by(method, sample) %>% 
+  mutate(tot_reads = sum(count), norm = count / tot_reads) %>% 
+  ungroup() %>% group_by(method) %>%
+  mutate(norm_median = round(norm * median(tot_reads)), log10_norm = log10(norm_median)) %>% 
+  ungroup() %>%
+  select(-sequence, -tot_reads, sequence)
+
 theme_set(theme_bw())
+
+meth = "uclust"
+
 # ref vs. non-ref boxplots, raw counts
-snr_box <- ggplot(data = dada2_gg) +
-  geom_boxplot(aes(x = sample, y = log10_norm, fill = factor(ref_like, levels = c(TRUE, FALSE)))) +
+snr_box <- ggplot(data = all_table %>% filter(method == meth)) +
+  geom_boxplot(aes(x = sample, y = log10_norm, fill = factor(hit, levels = c(TRUE, FALSE)))) +
   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
@@ -650,38 +807,73 @@ snr_box <- ggplot(data = dada2_gg) +
 snr_box
 
 # ref vs. non-ref violin plots, raw counts
-snr_violin <- ggplot(data = dada2_gg) +
+snr_violin <- ggplot(data = all_table %>% filter(method == method)) +
   geom_violin(aes(x = sample, y = log10_norm, fill = factor(hit, levels = c(T, F)))) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
-  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("purple", "green")) +
+  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_violin
 
+# average (mean(log10)) of ref vs. non-ref signal
+mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
+  geom_point(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) +
+  geom_line(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) + 
+  geom_point(data = subset(sample_sn_gg, !hit), aes(color = method, group = method)) +
+  geom_line(data = subset(sample_sn_gg, !hit), aes(color = method, group =method))
+mean_snr_line
+
+mean_snr_line <- ggplot(sample_summary, aes(x = sample, y = mean_snr)) +
+  geom_point(aes(color = method, group = method)) +
+  geom_line(aes(color = method, group = method)) +
+  scale_color_brewer(palette = "Dark2")
+mean_snr_line
+
 ```
 
-Create plots to show sample composition, colored by reference vs. non-reference.
-```{r}
+Create plot to show sample composition, colored by reference vs. non-reference.
+```{r composition plot}
 
-dada2_gg$id <- factor(dada2_gg$id, levels = dada2_table$id[order(dada2_table$s160.MC.Neat, decreasing = FALSE)])
-dada2_gg <- as.data.frame(dada2_gg)
-dada2_mini <- dada2_gg %>% group_by(sample) %>% slice(seq(1, 20, 2))
+library(RColorBrewer)
 
-comp_bar <- ggplot(dada2_gg, aes(x = sample, y = count, fill = id, group = hit, alpha = hit)) +
-  geom_col(width = 0.5, position = position_fill()) +
-  #scale_fill_grey() +
-  #scale_fill_manual(values = mypalette(nrow(dada2_gg))) +
-  scale_fill_discrete(h = c(0, 360) + 45, c = 100, l = 45, h.start = 0, direction = 1, na.value = "grey50") +
-  scale_alpha_discrete(range = c(0.25, 1)) +
-  #scale_fill_identity() +
-  theme(legend.position = "None")
+set.seed(444)
+data_table <- dada2_table
+data_gg <- dada2_gg
+
+hit_colors <- brewer.pal(sum(data_table$hit), "Dark2")
+other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!data_table$hit), replace = TRUE)
+
+data_table$color <- rep(NA, nrow(data_table))
+data_table$color[data_table$hit] <- hit_colors
+data_table$color[!data_table$hit] <- other_colors
+
+zeroes <- data_gg %>% filter(count == 0)
+
+color_gg <- data_table %>% select(id, sample_names, color) %>% gather("sample", "count", sample_names)
+legend_color <- c(bright = hit_colors[2], dull = other_colors[2])
+data_gg <- inner_join(data_gg, color_gg)
+
+comp_bar <- ggplot(data_gg, aes(x = sample, y = count)) +
+  geom_col(aes(fill = color, group = hit, alpha = ifelse(hit, "bright", "dull")), width = 0.5, position = position_fill()) +
+  scale_fill_identity(guide = FALSE) +
+  scale_alpha_manual(name = "Sequence type", 
+                     labels = c("mock community", "other"),
+                     values = c(bright = 1, dull = 1), 
+                     guide = guide_legend(override.aes = list(fill = c(hit_colors[4], "#AEAEAE")), 
+                                          keywidth = NULL, keyheight = NULL)) +
+  labs(title = "Relative composition of dilution series samples", x = "sample dilution", y = "fraction of sample") +
+  theme(legend.position = "right", legend.title = element_text(size = 12), 
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(size = 20))
 comp_bar
+comp_bar + coord_polar(theta = "y", start = 0)
 
 ```
 
-Plot counts of inferred sequences for each sample and each method.
-```{r}
+Plot number of inferred sequences for each sample and each method.
+```{r sequence count plots}
 
 # non-normalized counts from each method
 seqs_line_non <- ggplot(sample_summary, aes(x = sample, y = seqs)) +
@@ -689,39 +881,87 @@ seqs_line_non <- ggplot(sample_summary, aes(x = sample, y = seqs)) +
   geom_line(aes(group = method, color = method)) +
   labs(title = "Number of inferred sequences/OTUs at each concentration by each method", subtitle = "Non-normalized counts",
        x = "sample dilution", y = "sequence/OTU count") +
-  theme(legend.position = c(0.95, 0.05),
-        legend.justification = c(1, 0))
-#  facet_wrap(~method)
+  scale_color_brewer(palette = "Dark2") +
+  theme(legend.position = c(0.95, 0.95),
+        legend.justification = c(1, 1))
 seqs_line_non
 
 # normalized by median read count after processing by each method
 seqs_line_norm <- ggplot(sample_summary, aes(x = sample, y = seqs_norm_method)) +
   geom_point(aes(color = method), size = 2) +
   geom_line(aes(group = method, color = method)) +
-  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", subtitle = "Normalized by median read counts",
+  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
+       subtitle = "Normalized by median read counts",
        x = "sample dilution", y = "sequence/OTU count") +
+  scale_color_brewer(palette = "Dark2") +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
-#  facet_wrap(~method)
 seqs_line_norm
 
 # same plot as above, but only the first seven samples
 seqs_line_norm2 <- ggplot(sample_summary[sample_summary$sample %in% sample_names[1:7], ], aes(x = sample, y = seqs_norm_method)) +
   geom_point(aes(color = method)) +
-  geom_line(aes(group = method, color = method)) #+
-  #facet_wrap(~method)
+  geom_line(aes(group = method, color = method)) +
+  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
+       subtitle = "Normalized by median read counts (first 7 dilutions only)",
+       x = "sample dilution", y = "sequence/OTU count") +
+  scale_color_brewer(palette = "Dark2")
 seqs_line_norm2
 
 # normalized by median count of raw (un-processed) reads
 seqs_line_norm_raw <- ggplot(sample_summary, aes(x = sample, y = seqs_norm_raw)) +
   geom_point(aes(color = method), size = 2) +
   geom_line(aes(group = method, color = method)) +
-  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", subtitle = "Normalized by median read counts",
+  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
+       subtitle = "Normalized by median raw reads",
        x = "sample dilution", y = "sequence/OTU count") +
-  theme(legend.position = c(0.95, 0.05),
-        legend.justification = c(1, 0))
-#  facet_wrap(~method)
+  scale_color_brewer(palette = "Dark2") +
+  theme(legend.position = c(0.05, 0.95),
+        legend.justification = c(0, 1))
 seqs_line_norm_raw
+
+```
+
+
+Plot bar plots of relative abundance of reference sequences, facetted by sample.
+```{r reference seq bar plots}
+
+ref_bars <- ggplot(data = all_table %>% filter(hit, method == "dada2")) +
+  geom_col(aes(x = id, y = norm, fill = id), width = 0.8) +
+  facet_wrap(~sample) +
+  scale_fill_brewer(palette = "Dark2")
+ref_bars
+
+ref_joy <- ggplot(data = all_table %>% filter(hit, method == "uclust")) +
+  geom_density_ridges(aes(x = id, y = sample, fill = id, height = ..density..), stat = "density")
+ref_joy
+
+```
+
+
+Plot read counts of reference sequences across dilutions to show whether abundances maintain their relative order.
+```{r reference read counts}
+
+ref_lines <- ggplot(data = all_table %>% filter(hit, method == "dada2"), aes(x = sample, y = norm_median)) +
+  geom_line(aes(group = id, color = id)) +
+  geom_point(aes(color = id)) +
+  scale_color_brewer(palette = "Dark2")
+  #facet_wrap(~method)
+ref_lines
+
+```
+
+
+Plot Bray-Curtis distances of each dilution sample's reference sequences relative to the neat sample for each method.
+```{r bray-curtis lines}
+
+bc_gg <- gather(bray_curtis, "sample", "bc_similarity", one_of(sample_names))
+
+bc_lines <- ggplot(data = bc_gg, aes(x = sample, y = bc_similarity, color = method)) +
+  geom_line(aes(group = method)) +
+  geom_point() +
+  scale_color_brewer(palette = "Dark2")
+bc_lines
 
 ```
 
@@ -738,6 +978,65 @@ snr_box_cont <- ggplot(dada2_gg[!dada2_gg$hit & !dada2_gg$noisy, ], aes(x = samp
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_box_cont
+
+```
+
+
+Plot bar plots of summary stats (number of hits, noisies, contaminants, other).
+```{r summary stat bar plots}
+
+all_summary_gg <- gather(all_summary, "statistic", "value", -sample, -method)
+
+hits_median <- all_table %>% filter(hit) %>% .[["count"]] %>% mean()
+noisy_median <- all_table %>% filter(noisy) %>% .[["count"]] %>% mean()
+contam_median <- all_table %>% filter(contaminant) %>% .[["count"]] %>% mean()
+other_median <- all_table %>% filter(noisy) %>% .[["count"]] %>% mean()
+
+all_summary_gg <- all_summary_gg %>% mutate(norm_median = rep(1, nrow(all_summary_gg)))
+all_summary_gg[all_summary_gg$statistic == "hits", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "hits") %>% .[["value"]] * log10(hits_median)
+all_summary_gg[all_summary_gg$statistic == "noisy", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "noisy") %>% .[["value"]] * log10(noisy_median)
+all_summary_gg[all_summary_gg$statistic == "contaminants", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "contaminants") %>% .[["value"]] * log10(contam_median)
+all_summary_gg[all_summary_gg$statistic == "other", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "other") %>% .[["value"]] * log10(other_median)
+
+bar_colors <- brewer.pal(9, "Set1")
+
+summary_bars <- ggplot(data = all_summary_gg %>% filter(statistic %in% c("hits", "all noisy", "contaminants", "other")), 
+                       aes(x = sample)) +
+  geom_col(aes(y = log2(1 + value), fill = statistic), position = position_dodge()) +
+  facet_wrap(~method) +
+  scale_fill_manual(values = hit_colors[c(1, 3, 4, 6)])
+  #scale_fill_brewer(palette = "Set1")
+summary_bars
+
+summary_bars <- ggplot(data = all_summary_gg %>% filter(statistic %in% c("pct_hit", "pct_noisy", "pct_cont", "pct_other")), 
+                       aes(x = sample)) +
+  geom_col(aes(y = value, fill = statistic), position = position_dodge()) +
+  facet_wrap(~method) +
+  scale_fill_manual(values = bar_colors[c(3, 4, 5, 2)])
+  #scale_fill_brewer(palette = "Set1")
+summary_bars
+
+```
+
+
+Plot ratio of dada2 ASV_3 to ASV_8.
+```{r}
+
+ratio <-  dada2_table %>% filter(id %in% c("ASV_3", "ASV_8")) %>% select(sample_names) 
+ratio <- ratio[1,] / ratio[2,]
+ratio <- gather(ratio, "sample", "ratio")
+
+ggplot(data = dada2_gg %>% filter(id %in% c("ASV_3", "ASV_8")), aes(x = sample, y = count)) +
+  geom_line(aes(group = id, color = id)) +
+  geom_point(aes(color = id))
+
+ggplot(ratio, aes(x = sample, y = ratio)) +
+  geom_line() +
+  geom_point()
 
 ```
 
