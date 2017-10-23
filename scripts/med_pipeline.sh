@@ -61,7 +61,10 @@ fi
 med2uchime.sh -i "$OUTDIR"/NODE-REPRESENTATIVES.fasta \
 	      -o "$OUTDIR"/uchime/NODE-REPS-uchime.fasta
 
-usearch9 -uchime2_denovo "$OUTDIR"/uchime/NODE-uchime.fasta \
+usearch -sortbysize "$OUTDIR"/uchime/NODE-REPS-uchime.fasta \
+	-fastaout "$OUTDIR"/uchime/NODE-REPS-uchime.fasta
+
+usearch9 -uchime2_denovo "$OUTDIR"/uchime/NODE-REPS-uchime.fasta \
 	 -uchimeout "$OUTDIR"/uchime/uchime_tab.txt \
 	 -chimeras "$OUTDIR"/uchime/NODE-chimeras.fasta \
 	 -nonchimeras "$OUTDIR"/uchime/NODE-nonchimeras.fasta \
