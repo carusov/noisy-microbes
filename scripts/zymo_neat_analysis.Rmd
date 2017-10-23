@@ -152,12 +152,11 @@ write.table(deblur_table, file = file.path(result_path, "deblur/deblur_table.txt
 
 # load DADA2 table
 dada2_table <- read.table(file = file.path(result_path, "dada2/sv_table.no_chim.txt"), header = TRUE, sep = "\t")
-head(unname(dada2_table))
-dada2_table <- data.frame(t(dada2_table))
-dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "id"))
-dada2_seqs <- dada2_table$id
+colnames(dada2_table) <- sample_names
+dada2_seqs <- row.names(dada2_table)
 names(dada2_seqs) <- paste0("ASV_", 1:length(dada2_seqs))
 dada2_table$id <- names(dada2_seqs)
+dada2_table <- as.tibble(dada2_table) %>% select(id, sample_names)
 dada2_table
 write.table(dada2_table, file = file.path(result_path, "dada2/dada2_table.txt"), quote = FALSE, sep = "\t")
 
