@@ -44,16 +44,9 @@ colnames(uclust_table)[1] <- "id"
 uclust_table$id <- str_replace(uclust_table$id, "denovo", "denovo_")
 sample_names <- colnames(uclust_table)[-1]
 sample_names <- sample_names[order(sample_names)]
-#row.names(uclust_table) <- str_replace(uclust_table[, 1], "denovo", "denovo_")  # name rows by OTU ID
-#uclust_table <- uclust_table[, -1]  # remove OTU ID column
 uclust_table <- uclust_table %>% select(id, noquote(sample_names))
-#uclust_table <- uclust_table[, order(colnames(uclust_table))]
 uclust_table
-#str(uclust_table)
-#uclust_table[,] <- sapply(uclust_table[,], as.integer)
 write.table(uclust_table, file = file.path(result_path, "uclust/uclust_table.txt"), quote = FALSE, sep = "\t")
-
-#dilutions <- str_subset(sample_names, "MC")
 
 # load UCLUST representative sequences
 uclust_seqs <- readDNAStringSet(file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta"))
@@ -71,14 +64,8 @@ uparse_table <- as.tibble(read.table(file = file.path(result_path, "uparse/otu_t
                                      comment.char = ""))
 colnames(uparse_table)[1] <- "id"
 uparse_table$id <- str_replace(uparse_table$id, "OTU", "OTU_")
-#uparse_table[, -1] <- uparse_table %>% select(-id) %>% .[order(colnames(uparse_table)[-1])]
 colnames(uparse_table)[-1] <- sample_names
-#row.names(uparse_table) <- str_replace(uparse_table[, 1], "OTU", "OTU_")  # name rows by OTU ID
-#uparse_table <- uparse_table[, -1]  # remove OTU ID column
-#uparse_table <- uparse_table[, order(colnames(uparse_table))]
-#colnames(uparse_table) <- sample_names
 uparse_table
-#str(uparse_table)
 write.table(uparse_table, file = file.path(result_path, "uparse/uparse_table.txt"), quote = FALSE, sep = "\t")
 
 # load UPARSE representative sequences
@@ -96,12 +83,8 @@ unoise_table <- as.tibble(read.table(file = file.path(result_path, "unoise/zotu_
                                      comment.char = ""))
 colnames(unoise_table)[1] <- "id"
 unoise_table$id <- str_replace(unoise_table$id, "OTU", "ZOTU_")
-#row.names(unoise_table) <- str_replace(unoise_table[, 1], "OTU", "ZOTU_")  # name rows by ZOTU ID after renaming 'OTU' to 'ZOTU'
-#unoise_table <- unoise_table[, -1]  # remove ZOTU ID column
-#unoise_table <- unoise_table[, order(colnames(unoise_table))]
 colnames(unoise_table)[-1] <- sample_names
 unoise_table
-#str(unoise_table)
 write.table(unoise_table, file = file.path(result_path, "unoise/unoise_table.txt"), quote = FALSE, sep = "\t")
 
 # load UNOISE sequences
@@ -121,9 +104,7 @@ med_table <- med_table[, -1]  # remove sample name column
 med_table <- data.frame(t(med_table))   # samples as columns
 med_table <- as.tibble(rownames_to_column(med_table, var = "id"))
 med_table$id <- str_replace(med_table$id, "X", "Node_")
-#med_table <- med_table[, order(colnames(med_table))]
 med_table
-#str(med_table)
 
 # load MED sequences
 med_seqs <- readDNAStringSet(file.path(result_path, "med/NODE-REPRESENTATIVES.fasta"))
@@ -157,17 +138,11 @@ write.table(med_table, file = file.path(result_path, "med/med_table.txt"), quote
 deblur_table <- as.tibble(read.table(file = file.path(result_path, "deblur/all.txt"), header = TRUE, sep = "\t", 
                                      skip = 1, comment.char = ""))
 colnames(deblur_table)[1] <- "id"
-#head(deblur_table)
 deblur_seqs <- toupper(deblur_table$id)  
 names(deblur_seqs) <- paste0("sOTU_", 1:length(deblur_seqs))
 deblur_table$id <- names(deblur_seqs)
-#row.names(deblur_table) <- names(deblur_seqs)   # rename table rows with sOTU IDs intead of sequences
-#deblur_table <- deblur_table[, -1]  # remove sequence column
-#deblur_table <- deblur_table[, order(colnames(deblur_table))]
 deblur_table <- deblur_table %>% select(id, noquote(sample_names))
 deblur_table
-#str(deblur_table)
-#deblur_table[,] <- sapply(deblur_table[,], as.integer)
 write.table(deblur_table, file = file.path(result_path, "deblur/deblur_table.txt"), quote = FALSE, sep = "\t")
 
 ```
@@ -180,13 +155,10 @@ dada2_table <- read.table(file = file.path(result_path, "dada2/sv_table.no_chim.
 head(unname(dada2_table))
 dada2_table <- data.frame(t(dada2_table))
 dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "id"))
-#dada2_seqs <- row.names(dada2_table)
 dada2_seqs <- dada2_table$id
 names(dada2_seqs) <- paste0("ASV_", 1:length(dada2_seqs))
-#row.names(dada2_table) <- names(dada2_seqs)   # rename table rows with ASV IDs instead of sequences
 dada2_table$id <- names(dada2_seqs)
 dada2_table
-#str(dada2_table)
 write.table(dada2_table, file = file.path(result_path, "dada2/dada2_table.txt"), quote = FALSE, sep = "\t")
 
 ```
@@ -374,12 +346,12 @@ med_table$hit <- med_table$dist_to_ref == 0
 deblur_table$hit <- deblur_table$dist_to_ref == 0
 dada2_table$hit <- dada2_table$dist_to_ref == 0
 
-uclust_table$noisy <- isNoisy(uclust_table, uclust_to_ref, 1, 3)
-uparse_table$noisy <- isNoisy(uparse_table, uparse_to_ref, 1, 3)
-unoise_table$noisy <- isNoisy(unoise_table, unoise_to_ref, 1, 3)
-med_table$noisy <- isNoisy(med_table, med_to_ref, 1, 3)
-deblur_table$noisy <- isNoisy(deblur_table, deblur_to_ref, 1, 3)
-dada2_table$noisy <- isNoisy(dada2_table, dada2_to_ref, 1, 3)
+uclust_table$noisy <- isNoisy(uclust_table[, sample_names], uclust_to_ref, 1, 3)
+uparse_table$noisy <- isNoisy(uparse_table[, sample_names], uparse_to_ref, 1, 3)
+unoise_table$noisy <- isNoisy(unoise_table[, sample_names], unoise_to_ref, 1, 3)
+med_table$noisy <- isNoisy(med_table[, sample_names], med_to_ref, 1, 3)
+deblur_table$noisy <- isNoisy(deblur_table[, sample_names], deblur_to_ref, 1, 3)
+dada2_table$noisy <- isNoisy(dada2_table[, sample_names], dada2_to_ref, 1, 3)
 
 uclust_table$ref_like <- uclust_table$hit | uclust_table$noisy
 uparse_table$ref_like <- uparse_table$hit | uparse_table$noisy
@@ -971,7 +943,6 @@ Plot distribution boxplots of non-hit read counts for "contaminant" sequences vs
 
 snr_box_cont <- ggplot(dada2_gg[!dada2_gg$hit & !dada2_gg$noisy, ], aes(x = sample, y = log10_norm)) +
   geom_boxplot(aes(fill = factor(contaminant, levels = c(TRUE, FALSE)))) +
-  #ylim(c(0, 150)) +
   labs(title = "Distribution of log10(read counts) for non-hit contaminant and non-contaminant sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("contaminant", "non-contaminant"), values = c("blue", "orange")) +
