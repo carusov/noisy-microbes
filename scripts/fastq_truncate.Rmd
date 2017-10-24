@@ -57,10 +57,9 @@ opt = parse_args(opt_parser)
 First things first: the file names are really long and contain redundant information, so I'll rename them to remove the unnecessary bits.
 ```{r rename files}
 
-#data_path <- "~/projects/thesis/data/damore_balanced"
+#data_path <- "~/projects/thesis/data/test_bal"
 data_path <- opt$data
 raw_path <- file.path(data_path, "raw")
-#setwd(raw_path)
 
 file_names <- list.files(raw_path)
 fastqs <- str_subset(file_names, ".fastq$")
@@ -112,17 +111,6 @@ if (length(list.files(qual_path)) == 0){
   }
 }
 
-
-# plotQualityProfile(file.path("raw", fastq_Fs[10])) + 
-#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) +
-#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-#   theme(panel.grid.major = element_line(colour="grey", size=0.5))
-# plotQualityProfile(file.path("raw", fastq_Rs[7])) + 
-#   scale_y_continuous(limits = c(10, 40), breaks = seq(10, 40, 5)) + 
-#   scale_x_continuous(limits = c(0, 250), breaks = seq(0, 250, 10)) +
-#   theme(panel.grid.major = element_line(colour="grey", size=0.5))
-
-
 ```
 
 
@@ -135,8 +123,6 @@ Based on the quality profiles, I'll truncate the forward reads at position 230, 
 trunc_path <- file.path(data_path, "truncated")
 if (!file_test("-d", trunc_path)) dir.create(trunc_path)
 
-# trunc_Fs <- file.path(trunc_path, paste0(sample_names, "_F_trunc.fastq"))
-# trunc_Rs <- file.path(trunc_path, paste0(sample_names, "_R_trunc.fastq"))
 trunc_Fs <- paste0(sample_names, "_trunc_R1.fastq")
 trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
 
@@ -144,6 +130,7 @@ trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
 for (i in seq_along(fastq_Fs)){
   fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), file.path(trunc_path, c(trunc_Fs[i], trunc_Rs[i])),
                     truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = c(15, 15),
+                    #truncLen = c(240, 220), trimLeft = c(15, 15),
                     maxN = Inf, maxEE = c(Inf, Inf), truncQ = 2, rm.phix = TRUE,
                     compress = FALSE, verbose = TRUE)
 }
