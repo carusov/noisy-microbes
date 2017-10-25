@@ -13,7 +13,7 @@ do
 	    OUTFILE="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: merge_and_filter -i in_file -o out_file\n\n"
+	    printf "\nUSAGE: med2uchime.sh -i in_file -o out_file\n\n"
 	    exit;;
 	*)
 
