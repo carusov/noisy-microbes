@@ -70,30 +70,40 @@ if [ ! -d "$OUTDIR" ]; then
 fi
 
 # Run the UCLUST pipeline
-printf "\nRunning the UCLUST pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the UCLUST pipeline...\n"
+printf "\n######################################################################\n"
 uclust_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 		   -o $OUTDIR/uclust \
 		   -r $REFDIR/gold.fa
 
 # Run the UPARSE pipeline
-printf "\nRunning the UPARSE pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the UPARSE pipeline...\n"
+printf "\n######################################################################\n"
 uparse_pipeline.sh -i $INDIR/filtered/pooled_filtered.fastq \
 		   -o $OUTDIR/uparse \
 		   -r $INDIR/merged/pooled_merged.fastq
 
 # Run the UNOISE pipeline
-printf "\nRunning the UNOISE pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the UNOISE pipeline...\n"
+printf "\n######################################################################\n"
 unoise_pipeline.sh -i $INDIR/filtered/pooled_filtered.fastq \
 		   -o $OUTDIR/unoise \
 		   -r $INDIR/merged/pooled_merged.fastq
 
 # Run the MED pipeline
-printf "\nRunning the MED pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the MED pipeline...\n"
+printf "\n######################################################################\n"
 med_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 		-o $OUTDIR/med
 
 # Run the Deblur pipeline
-printf "\nRunning the Deblur pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the Deblur pipeline...\n"
+printf "\n######################################################################\n"
 deblur_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 		   -o $OUTDIR/deblur \
 		   -t $MIN_LEN
@@ -105,7 +115,9 @@ cd $SCRIPTS
 rmd2r.R -i dada2_pipeline.Rmd
 
 # Now run it
-printf "\nRunning the DADA2 pipeline...\n\n"
+printf "\n######################################################################\n"
+printf "\nRunning the DADA2 pipeline...\n"
+printf "\n######################################################################\n"
 Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR \
 	-f $FTRUNC -b $RTRUNC \
 	-s $MIN_LEN -l $MAX_LEN
