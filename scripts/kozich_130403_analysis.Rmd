@@ -269,31 +269,31 @@ Write a function to count and identify sequences that differ by only 1 (or 2 or 
 ```{r noisy functions}
 
 # function to generate a table of "noisy"" sequences: those that are very similar to the reference sequences
-countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
+countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
   if (max(colSums(dist_mat == 0)) > 1) {
     print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
     print("This may result in inaccurate counts of noisy seuqences.")
   }
   
-  if (sum(!sapply(seq_table, class) %in% c("integer", "numeric")) > 0){
+  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
     stop("The sequence table must only contain column vectors of type 'integer'.")
   }
   
-  rmat <- matrix(0, nrow = ncol(seq_table), ncol = (max_dist - min_dist) + 1, 
-                 dimnames = list(colnames(seq_table), paste(min_dist:max_dist, "off")))
+  rmat <- matrix(0, nrow = ncol(seq_tab), ncol = (max_dist - min_dist) + 1, 
+                 dimnames = list(colnames(seq_tab), paste(min_dist:max_dist, "off")))
   
   for (n in min_dist:max_dist){
     mins <- apply(dist_mat, 1, min)   
     noisy_ind <- which(dist_mat == n, arr.ind = TRUE)
     noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
-    has_zero <- apply(dist_mat[, noisy_ind[, "col"]], 2, min) == 0  # is there a hit to the nearest reference?
-    noisy_ind <- noisy_ind[has_zero, ]
+    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
+    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
     
     if (length(noisy_ind) > 0){
-      ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)  # get nearest sequence that matches reference
+      ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)  # get nearest sequence that matches reference
       noisy_ind <- cbind(noisy_ind, ref_row)
-      is_n_off <- ( (seq_table[noisy_ind[, "row"], ] > 0) & 
-                   (seq_table[noisy_ind[, "row"], ] < seq_table[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
+      is_n_off <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
+                   (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
       row.names(is_n_off) <- row.names(noisy_ind)
       is_n_off <- aggregate(is_n_off, by = list(row.names(is_n_off)), FUN = max)
       row.names(is_n_off) <- is_n_off$Group.1
@@ -308,21 +308,30 @@ countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
 
 # define a function that returns whether sequences of a sequence table are "noisy"
 isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
+  if (max(colSums(dist_mat == 0)) > 1) {
+    print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
+    print("This may result in inaccurate counts of noisy seuqences.")
+  }
+  
+  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
+    stop("The sequence table must only contain column vectors of type 'integer'.")
+  }
+  
   mins <- apply(dist_mat, 1, min)   # get minimum distance for each sequence
   noisy_ind <- which(dist_mat >= min_dist & dist_mat <= max_dist, arr.ind = TRUE) 
   if (length(noisy_ind) == 0){
     return(rep(FALSE, nrow(dist_mat)))
   } 
   else {
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], ]   # make sure it's a minimum distance
-    has_zero <- apply(dist_mat[, noisy_ind[, "col"]], 2, min) == 0  # is there a hit to the nearest reference?
-    noisy_ind <- noisy_ind[has_zero, ]
-    ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)   # find the nearest sequence that matches the reference
+    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
+    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
+    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
+    ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)   # find the nearest sequence that matches the reference
     noisy_ind <- cbind(noisy_ind, ref = ref_row)
     is_noisy <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
                     (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref"], ]) )   # is abundance less than reference?
     is_noisy <- apply(is_noisy, 1, any)   # collapse to vector
-    noisy_ind <- noisy_ind[is_noisy, ]    # remove any with abundance higher than reference
+    noisy_ind <- noisy_ind[is_noisy, , drop = FALSE]    # remove any with abundance higher than reference
     noisy <- 1:nrow(dist_mat) %in% noisy_ind[, "row"]  
     return(noisy)
   }

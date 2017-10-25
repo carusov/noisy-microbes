@@ -121,11 +121,13 @@ names(med_seqs) <- paste0("Node_", sapply(str_split(names(med_seqs), "\\|"), FUN
 
 # UCHIME method
 med_seqs.chimeras <- readDNAStringSet(file.path(result_path, "med/uchime/NODE-chimeras.fasta"))
-med_seqs.chimeras <- as.character(med_seqs.chimeras)
-names(med_seqs.chimeras) <- paste0("Node_", sapply(str_split(names(med_seqs.chimeras), ";"), FUN = `[`, 1))
-med_table <- med_table[!med_seqs %in% med_seqs.chimeras, ]
-med_table
-med_seqs <- med_seqs[!med_seqs %in% med_seqs.chimeras]
+if (length(med_seqs.chimeras) > 0){
+  med_seqs.chimeras <- as.character(med_seqs.chimeras)
+  names(med_seqs.chimeras) <- paste0("Node_", sapply(str_split(names(med_seqs.chimeras), ";"), FUN = `[`, 1))
+  med_table <- med_table[!med_seqs %in% med_seqs.chimeras, ]
+  med_table
+  med_seqs <- med_seqs[!med_seqs %in% med_seqs.chimeras]
+}
 
 write.table(med_table, file = file.path(result_path, "med/med_table.txt"), quote = FALSE, sep = "\t")
 
@@ -152,7 +154,6 @@ write.table(deblur_table, file = file.path(result_path, "deblur/deblur_table.txt
 
 # load DADA2 table
 dada2_table <- read.table(file = file.path(result_path, "dada2/sv_table.no_chim.txt"), header = TRUE, sep = "\t")
-head(unname(dada2_table))
 dada2_table <- data.frame(t(dada2_table))
 dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "id"))
 dada2_seqs <- dada2_table$id
@@ -191,7 +192,7 @@ dada2_table$sequence <- dada2_seqs[dada2_table$id]
 uclust_seqs <- uclust_seqs[uclust_table$id]
 uparse_seqs <- uparse_seqs[uparse_table$id]
 unoise_seqs <- unoise_seqs[unoise_table$id]
-med_seqs <- med_seqs[row.names(med_table)]
+med_seqs <- med_seqs[med_table$id]
 deblur_seqs <- deblur_seqs[deblur_table$id]
 dada2_seqs <- dada2_seqs[dada2_table$id]
 
@@ -271,29 +272,31 @@ Write a function to count and identify sequences that differ by only 1 (or 2 or 
 ```{r noisy functions}
 
 # function to generate a table of "noisy"" sequences: those that are very similar to the reference sequences
-countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
+countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
   if (max(colSums(dist_mat == 0)) > 1) {
     print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
     print("This may result in inaccurate counts of noisy seuqences.")
   }
   
-  if (sum(!sapply(seq_table, class) %in% c("integer", "numeric")) > 0){
+  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
     stop("The sequence table must only contain column vectors of type 'integer'.")
   }
   
-  rmat <- matrix(0, nrow = ncol(seq_table), ncol = (max_dist - min_dist) + 1, 
-                 dimnames = list(colnames(seq_table), paste(min_dist:max_dist, "off")))
+  rmat <- matrix(0, nrow = ncol(seq_tab), ncol = (max_dist - min_dist) + 1, 
+                 dimnames = list(colnames(seq_tab), paste(min_dist:max_dist, "off")))
   
   for (n in min_dist:max_dist){
     mins <- apply(dist_mat, 1, min)   
     noisy_ind <- which(dist_mat == n, arr.ind = TRUE)
     noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
+    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
+    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
     
     if (length(noisy_ind) > 0){
-      ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)  # get nearest sequence that matches reference
+      ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)  # get nearest sequence that matches reference
       noisy_ind <- cbind(noisy_ind, ref_row)
-      is_n_off <- ( (seq_table[noisy_ind[, "row"], ] > 0) & 
-                   (seq_table[noisy_ind[, "row"], ] < seq_table[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
+      is_n_off <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
+                   (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
       row.names(is_n_off) <- row.names(noisy_ind)
       is_n_off <- aggregate(is_n_off, by = list(row.names(is_n_off)), FUN = max)
       row.names(is_n_off) <- is_n_off$Group.1
@@ -308,19 +311,30 @@ countNoisySeqs <- function(seq_table, dist_mat, min_dist = 1, max_dist = 3) {
 
 # define a function that returns whether sequences of a sequence table are "noisy"
 isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
+  if (max(colSums(dist_mat == 0)) > 1) {
+    print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
+    print("This may result in inaccurate counts of noisy seuqences.")
+  }
+  
+  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
+    stop("The sequence table must only contain column vectors of type 'integer'.")
+  }
+  
   mins <- apply(dist_mat, 1, min)   # get minimum distance for each sequence
   noisy_ind <- which(dist_mat >= min_dist & dist_mat <= max_dist, arr.ind = TRUE) 
   if (length(noisy_ind) == 0){
     return(rep(FALSE, nrow(dist_mat)))
   } 
   else {
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], ]   # make sure it's a minimum distance
-    ref_row <- apply(as.matrix(dist_mat[, noisy_ind[, "col"] ]) == 0, 2, which)   # find the nearest sequence that matches the reference
+    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
+    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
+    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
+    ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)   # find the nearest sequence that matches the reference
     noisy_ind <- cbind(noisy_ind, ref = ref_row)
     is_noisy <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
                     (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref"], ]) )   # is abundance less than reference?
     is_noisy <- apply(is_noisy, 1, any)   # collapse to vector
-    noisy_ind <- noisy_ind[is_noisy, ]    # remove any with abundance higher than reference
+    noisy_ind <- noisy_ind[is_noisy, , drop = FALSE]    # remove any with abundance higher than reference
     noisy <- 1:nrow(dist_mat) %in% noisy_ind[, "row"]  
     return(noisy)
   }
@@ -483,6 +497,7 @@ dada2_table$consensus <- apply(dada2_table[, sample_names], 1, min) > 0
 Compute summary tables for each method.
 ```{r compute method summaries}
 
+methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
 method_tables <- list(uclust_table, uparse_table, unoise_table, med_table, deblur_table, dada2_table)
 names(method_tables) <- methods
 dist_tables <- list(uclust_to_ref, uparse_to_ref, unoise_to_ref, med_to_ref, deblur_to_ref, dada2_to_ref)
@@ -533,7 +548,6 @@ Now, compute summary tables by sample (for all 9 dilutions).
 ```{r compute sample tables}
 
 # combine sequences from all methods
-methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
 all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
                      deblur_table$sequence, dada2_table$sequence))
 
@@ -574,7 +588,7 @@ for (i in seq_along(sample_names)){
   sample_table <- data.frame(t(sample_st)) %>% rownames_to_column(var = "sequence") %>% as.tibble()
   sample_table$dist_to_ref <- apply(sample_to_ref, 1, min)
   sample_table$hit <- sample_table$dist_to_ref == 0
-  sample_table$noisy <- isNoisy(sample_table, sample_to_ref)
+  sample_table$noisy <- isNoisy(sample_table[, methods], sample_to_ref)
   
   # Compute summary statistics
   sample_hits <- colSums(sample_table$hit & sample_table[, methods] > 0)
@@ -789,12 +803,12 @@ snr_violin <- ggplot(data = all_table %>% filter(method == method)) +
 snr_violin
 
 # average (mean(log10)) of ref vs. non-ref signal
-mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
-  geom_point(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) +
-  geom_line(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) + 
-  geom_point(data = subset(sample_sn_gg, !hit), aes(color = method, group = method)) +
-  geom_line(data = subset(sample_sn_gg, !hit), aes(color = method, group =method))
-mean_snr_line
+# mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
+#   geom_point(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) + 
+#   geom_point(data = subset(sample_sn_gg, !hit), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, !hit), aes(color = method, group =method))
+# mean_snr_line
 
 mean_snr_line <- ggplot(sample_summary, aes(x = sample, y = mean_snr)) +
   geom_point(aes(color = method, group = method)) +
@@ -840,7 +854,7 @@ comp_bar <- ggplot(data_gg, aes(x = sample, y = count)) +
         axis.title = element_text(size = 16),
         plot.title = element_text(size = 20))
 comp_bar
-comp_bar + coord_polar(theta = "y", start = 0)
+#comp_bar + coord_polar(theta = "y", start = 0)
 
 ```
 
@@ -904,9 +918,9 @@ ref_bars <- ggplot(data = all_table %>% filter(hit, method == "dada2")) +
   scale_fill_brewer(palette = "Dark2")
 ref_bars
 
-ref_joy <- ggplot(data = all_table %>% filter(hit, method == "uclust")) +
-  geom_density_ridges(aes(x = id, y = sample, fill = id, height = ..density..), stat = "density")
-ref_joy
+# ref_joy <- ggplot(data = all_table %>% filter(hit, method == "uclust")) +
+#   geom_density_ridges(aes(x = id, y = sample, fill = id, height = ..density..), stat = "density")
+# ref_joy
 
 ```
 
@@ -941,7 +955,8 @@ bc_lines
 Plot distribution boxplots of non-hit read counts for "contaminant" sequences vs non-contaminant ("other") sequences.
 ```{r snr contaminant vs other}
 
-snr_box_cont <- ggplot(dada2_gg[!dada2_gg$hit & !dada2_gg$noisy, ], aes(x = sample, y = log10_norm)) +
+#snr_box_cont <- ggplot(dada2_gg[!dada2_gg$hit & !dada2_gg$noisy, ], aes(x = sample, y = log10_norm)) +
+snr_box_cont <- ggplot(all_table %>% filter(method == "dada2", !ref_like), aes(x = sample, y = log10_norm)) +
   geom_boxplot(aes(fill = factor(contaminant, levels = c(TRUE, FALSE)))) +
   labs(title = "Distribution of log10(read counts) for non-hit contaminant and non-contaminant sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
@@ -997,17 +1012,17 @@ summary_bars
 Plot ratio of dada2 ASV_3 to ASV_8.
 ```{r}
 
-ratio <-  dada2_table %>% filter(id %in% c("ASV_3", "ASV_8")) %>% select(sample_names) 
-ratio <- ratio[1,] / ratio[2,]
-ratio <- gather(ratio, "sample", "ratio")
-
-ggplot(data = dada2_gg %>% filter(id %in% c("ASV_3", "ASV_8")), aes(x = sample, y = count)) +
-  geom_line(aes(group = id, color = id)) +
-  geom_point(aes(color = id))
-
-ggplot(ratio, aes(x = sample, y = ratio)) +
-  geom_line() +
-  geom_point()
+# ratio <-  dada2_table %>% filter(id %in% c("ASV_3", "ASV_8")) %>% select(sample_names) 
+# ratio <- ratio[1,] / ratio[2,]
+# ratio <- gather(ratio, "sample", "ratio")
+# 
+# ggplot(data = dada2_gg %>% filter(id %in% c("ASV_3", "ASV_8")), aes(x = sample, y = count)) +
+#   geom_line(aes(group = id, color = id)) +
+#   geom_point(aes(color = id))
+# 
+# ggplot(ratio, aes(x = sample, y = ratio)) +
+#   geom_line() +
+#   geom_point()
 
 ```
 
