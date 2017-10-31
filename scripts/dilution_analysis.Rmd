@@ -756,7 +756,7 @@ bray_curtis <- do.call("rbind", bray_curtis) %>% as.tibble() %>% mutate(method =
 
 library(ggridges)
 
-all_table_pos <- all_table %>% filter(sample == sample_names[4], count > 100)
+all_table_pos <- all_table %>% filter(sample == sample_names[9], count > 100)
 
 read_hist <- ggplot(all_table_pos, aes(x = count, y = hit)) +
   geom_density_ridges(aes(fill = hit, height = ..density..), scale = 0.9, stat = "binline", bins = 120, panel_scaling = FALSE) +
@@ -780,7 +780,7 @@ all_table <- all_table %>% group_by(method, sample) %>%
 
 theme_set(theme_bw())
 
-meth = "uclust"
+meth = "deblur"
 
 # ref vs. non-ref boxplots, raw counts
 snr_box <- ggplot(data = all_table %>% filter(method == meth)) +
@@ -823,9 +823,11 @@ Create plot to show sample composition, colored by reference vs. non-reference.
 
 library(RColorBrewer)
 
+meth = "dada2"
+
 set.seed(444)
-data_table <- dada2_table
-data_gg <- dada2_gg
+data_table <- method_tables[[meth]]
+data_gg <- all_table %>% filter(method == meth)
 
 hit_colors <- brewer.pal(sum(data_table$hit), "Dark2")
 other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!data_table$hit), replace = TRUE)
@@ -833,8 +835,6 @@ other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!data_table$h
 data_table$color <- rep(NA, nrow(data_table))
 data_table$color[data_table$hit] <- hit_colors
 data_table$color[!data_table$hit] <- other_colors
-
-zeroes <- data_gg %>% filter(count == 0)
 
 color_gg <- data_table %>% select(id, sample_names, color) %>% gather("sample", "count", sample_names)
 legend_color <- c(bright = hit_colors[2], dull = other_colors[2])
@@ -912,7 +912,7 @@ seqs_line_norm_raw
 Plot bar plots of relative abundance of reference sequences, facetted by sample.
 ```{r reference seq bar plots}
 
-ref_bars <- ggplot(data = all_table %>% filter(hit, method == "dada2")) +
+ref_bars <- ggplot(data = all_table %>% filter(hit, method == "deblur")) +
   geom_col(aes(x = id, y = norm, fill = id), width = 0.8) +
   facet_wrap(~sample) +
   scale_fill_brewer(palette = "Dark2")
