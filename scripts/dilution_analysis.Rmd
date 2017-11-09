@@ -16,6 +16,7 @@ library(dada2)
 library(stringr)
 library(Biostrings)
 library(tidyverse)
+library(ShortRead)
 
 result_path <- "~/projects/thesis/results/dilution"
 ref_path <- "~/projects/thesis/references"
@@ -380,8 +381,6 @@ dada2_table$ref_like <- dada2_table$hit | dada2_table$noisy
 Next, write each method's inferred (singleton-free) sequences to a fasta file, for BLASTing against nt.
 ```{r write fastas}
 
-library(ShortRead)
-
 uclust_seqs <- DNAStringSet(uclust_seqs)
 writeFasta(uclust_seqs, file.path(analysis_path, "uclust_seqs.fasta"))
 uparse_seqs <- DNAStringSet(uparse_seqs)
@@ -619,6 +618,7 @@ names(dilution_summary) <- sample_names
 ```
 
 
+
 Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
 
@@ -682,7 +682,14 @@ all_table <- gather(all_table, "sample", "count", one_of(sample_names)) %>% sele
 medians <- all_table %>% group_by(method, sample) %>% summarise(reads = sum(count)) %>% summarise(median_reads = median(reads)) %>%
   select(median_reads)
 
+dilution_labels <- sapply(str_split(sample_names, "\\."), function(d){
+  paste(d[3:4], collapse = ":")
+})
+dilution_labels[1] <- "1:1"
+dilution_values <- sapply(str_split(dilution_labels, ":"), function(d) as.numeric(d[1]) / as.numeric(d[2]))
+
 ```
+
 
 Create tables of sequence and read count summaries per sample, and for each method.
 ```{r summary tables}
@@ -752,6 +759,79 @@ bray_curtis <- do.call("rbind", bray_curtis) %>% as.tibble() %>% mutate(method =
 ```
 
 
+Investigate how many of the filtered input reads are represented in the processed sequence tables. Is there much of a difference in how many reads are "kept" at different dilutions, or by different methods?
+```{r reads kept}
+
+data_path <- "~/projects/thesis/data/dilution"
+prefixes <- unique(sapply(str_subset(list.files(file.path(data_path, "raw")), "s\\d+.*"), str_replace, "_R.*", ""))
+raw_reads <- sapply(prefixes, function(f) length(readFastq(file.path(data_path, "raw"), pattern = paste0(f, "_R1"))))
+filtered_reads <- sapply(prefixes, function(f) length(readFastq(file.path(data_path, "filtered"), pattern = f)))
+
+kept_reads <- matrix(0, nrow = length(methods), ncol = length(sample_names))
+row.names(kept_reads) <- methods
+colnames(kept_reads) <- sample_names
+
+kept_reads["uclust", ] <- colSums(uclust_table[, sample_names]) / filtered_reads
+kept_reads["uparse", ] <- colSums(uparse_table[, sample_names]) / raw_reads
+kept_reads["unoise", ] <- colSums(unoise_table[, sample_names]) / raw_reads
+kept_reads["med", ] <- colSums(med_table[, sample_names]) / filtered_reads
+kept_reads["deblur", ] <- colSums(deblur_table[, sample_names]) / filtered_reads
+kept_reads["dada2", ] <- track_table[, "non_chim"] / track_table[, "raw"]
+
+kept_reads <- as.tibble(rownames_to_column(as.data.frame(kept_reads), var = "method"))
+kept_reads_gg <- gather(kept_reads, "sample", "pct_kept", sample_names)
+
+library(directlabels)
+
+# plot kept reads across dilutions, color-coded by method
+kept_lines <- ggplot(kept_reads_gg, aes(x = sample, y = pct_kept)) +
+  geom_line(aes(group = method, color = method)) +
+  geom_dl(aes(label = method), method = list(dl.combine("first.qp", "last.qp"))) +
+  labs(title = "Fraction of input reads represented in the processed output",
+          x = "sample dilution", y = "proportion of input reads") + 
+  scale_x_discrete(labels = dilution_labels)
+kept_lines
+
+```
+
+
+Examine the relationship between read count and dilution at the sequence level. Are they correlated, and is the correlation positive or negative?
+```{r dilution correlation}
+
+seqCor <- function(seq_tab, samples, vals) {
+  sapply(seq_along(seq_tab[[1]]), function(row) {
+    cor(seq_tab %>% select(samples) %>% slice(row) %>% unlist(., use.names = FALSE), vals, method = "spearman")
+  })
+}
+
+method_tables <- lapply(method_tables, function(mt) {
+  mt$dilution_cor <- seqCor(mt, sample_names, dilution_values)
+  return(mt)
+})
+
+# What are the dilution correlations for the reference sequences?
+method_tables$uclust %>% filter(hit) %>% select(sample_names, dilution_cor)
+
+# How many sequences have very strong negative correlations?
+method_tables$uclust %>% filter(dilution_cor <= -.9, contaminant) %>% select(sample_names, dilution_cor)
+
+# How many sequences are "contaminants" and have less than three zero sequence counts?
+method_tables$dada2 %>% filter(contaminant, !noisy, rowSums(.[, sample_names] == 0) < 3) %>% select(sample_names, dilution_cor)
+
+# Of these, how many have negative dilution correlations?
+method_tables$dada2 %>% filter(contaminant, !noisy, rowSums(.[, sample_names] == 0) < 3, dilution_cor < 0) %>% 
+  select(sample_names, dilution_cor)
+
+# How many unclassified ("other") sequences have less than three zero counts?
+method_tables$dada2 %>% filter(other, !noisy, rowSums(.[, sample_names] == 0) < 4) %>% select(sample_names, dilution_cor)
+
+# Of these, how many have negative dilution correlations?
+method_tables$uparse %>% filter(other, !noisy, rowSums(.[, sample_names] == 0) < 4, dilution_cor < 0) %>% 
+  select(sample_names, dilution_cor)
+
+```
+
+
 ```{r read count histograms}
 
 library(ggridges)
@@ -788,6 +868,7 @@ snr_box <- ggplot(data = all_table %>% filter(method == meth)) +
   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_box
@@ -798,6 +879,7 @@ snr_violin <- ggplot(data = all_table %>% filter(method == method)) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_violin
@@ -813,6 +895,7 @@ snr_violin
 mean_snr_line <- ggplot(sample_summary, aes(x = sample, y = mean_snr)) +
   geom_point(aes(color = method, group = method)) +
   geom_line(aes(color = method, group = method)) +
+  scale_x_discrete(labels = dilution_labels) +
   scale_color_brewer(palette = "Dark2")
 mean_snr_line
 
@@ -848,6 +931,7 @@ comp_bar <- ggplot(data_gg, aes(x = sample, y = count)) +
                      values = c(bright = 1, dull = 1), 
                      guide = guide_legend(override.aes = list(fill = c(hit_colors[4], "#AEAEAE")), 
                                           keywidth = NULL, keyheight = NULL)) +
+  scale_x_discrete(labels = dilution_labels) +
   labs(title = "Relative composition of dilution series samples", x = "sample dilution", y = "fraction of sample") +
   theme(legend.position = "right", legend.title = element_text(size = 12), 
         axis.text = element_text(size = 12),
@@ -868,6 +952,7 @@ seqs_line_non <- ggplot(sample_summary, aes(x = sample, y = seqs)) +
   labs(title = "Number of inferred sequences/OTUs at each concentration by each method", subtitle = "Non-normalized counts",
        x = "sample dilution", y = "sequence/OTU count") +
   scale_color_brewer(palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.95, 0.95),
         legend.justification = c(1, 1))
 seqs_line_non
@@ -880,6 +965,7 @@ seqs_line_norm <- ggplot(sample_summary, aes(x = sample, y = seqs_norm_method)) 
        subtitle = "Normalized by median read counts",
        x = "sample dilution", y = "sequence/OTU count") +
   scale_color_brewer(palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 seqs_line_norm
@@ -891,6 +977,7 @@ seqs_line_norm2 <- ggplot(sample_summary[sample_summary$sample %in% sample_names
   labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
        subtitle = "Normalized by median read counts (first 7 dilutions only)",
        x = "sample dilution", y = "sequence/OTU count") +
+  scale_x_discrete(labels = dilution_labels) +
   scale_color_brewer(palette = "Dark2")
 seqs_line_norm2
 
@@ -902,6 +989,7 @@ seqs_line_norm_raw <- ggplot(sample_summary, aes(x = sample, y = seqs_norm_raw))
        subtitle = "Normalized by median raw reads",
        x = "sample dilution", y = "sequence/OTU count") +
   scale_color_brewer(palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.05, 0.95),
         legend.justification = c(0, 1))
 seqs_line_norm_raw
@@ -931,6 +1019,7 @@ Plot read counts of reference sequences across dilutions to show whether abundan
 ref_lines <- ggplot(data = all_table %>% filter(hit, method == "dada2"), aes(x = sample, y = norm_median)) +
   geom_line(aes(group = id, color = id)) +
   geom_point(aes(color = id)) +
+  scale_x_discrete(labels = dilution_labels) +
   scale_color_brewer(palette = "Dark2")
   #facet_wrap(~method)
 ref_lines
@@ -946,6 +1035,7 @@ bc_gg <- gather(bray_curtis, "sample", "bc_similarity", one_of(sample_names))
 bc_lines <- ggplot(data = bc_gg, aes(x = sample, y = bc_similarity, color = method)) +
   geom_line(aes(group = method)) +
   geom_point() +
+  scale_x_discrete(labels = dilution_labels) +
   scale_color_brewer(palette = "Dark2")
 bc_lines
 
@@ -961,6 +1051,7 @@ snr_box_cont <- ggplot(all_table %>% filter(method == "dada2", !ref_like), aes(x
   labs(title = "Distribution of log10(read counts) for non-hit contaminant and non-contaminant sequences",
           subtitle = "Dilution series processed with DADA2", x = "sample dilution", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("contaminant", "non-contaminant"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_box_cont
