@@ -10,9 +10,9 @@
 ### Usage: run_all_pipelines.sh
 
 # Set the default input, output, and reference directories
-INDIR=~/projects/thesis/data/dilution_w_blank
-OUTDIR=~/projects/thesis/results/dilution_w_blank
-REFDIR=~/projects/thesis/references
+INDIR=~/thesis/data/dilution
+OUTDIR=~/thesis/results/dilution
+REFDIR=~/thesis/references
 
 # Set default sequence length and filtering parameters
 MIN_LEN=220
@@ -110,7 +110,7 @@ deblur_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
 
 # Run the DADA2 pipeline with defaults
 # First, make sure we have the latest version of the script
-SCRIPTS=~/projects/thesis/noisy-microbes/scripts
+SCRIPTS=~/thesis/noisy-microbes/scripts
 cd $SCRIPTS
 rmd2r.R -i dada2_pipeline.Rmd
 
@@ -118,6 +118,6 @@ rmd2r.R -i dada2_pipeline.Rmd
 printf "\n######################################################################\n"
 printf "\nRunning the DADA2 pipeline...\n"
 printf "\n######################################################################\n"
-Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR \
+Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR/dada2 \
 	-f $FTRUNC -b $RTRUNC \
 	-s $MIN_LEN -l $MAX_LEN

@@ -6,9 +6,9 @@
 ### (see www.qiime.org for detailed documentation)
 
 # Set the default input file, output directory, and 16S reference db
-INFILE=~/projects/thesis/data/dilution_w_blank/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/projects/thesis/results/dilution_w_blank/uclust
-REF_FILE=~/projects/thesis/references/gold.fa
+INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
+OUTDIR=~/thesis/results/dilution/uclust
+REF_FILE=~/thesis/references/gold.fa
 
 # Parse command-line options
 while [[ $# -gt 0 ]]

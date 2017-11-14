@@ -8,10 +8,10 @@
 ### (see www.drive5.com/usearch for detailed documentation)
 
 # Define the scripts path
-SCRIPTS=~/projects/thesis/noisy-microbes/scripts
+SCRIPTS=~/thesis/noisy-microbes/scripts
 
 # Set the default working directory
-WDIR=~/projects/thesis/data/dilution_w_blank
+WDIR=~/thesis/data/dilution
 
 # Set the default truncation parameters
 FTRUNC=230
@@ -132,6 +132,8 @@ do
 
     usearch -fastx_info $WDIR/merged/$nn \
 	    -output $WDIR/reports/$bn"_merged_info.txt"
+
+    rm $WDIR/merged/$nn
 done
 
 # Now filter the individual samples too, in case we need stats on the output of filtering
@@ -146,6 +148,8 @@ do
     
     usearch -fastx_info $WDIR/filtered/$nn \
 	    -output $WDIR/reports/$bn"_filtered_info.txt"
+
+    rm $WDIR/filtered/$nn
 done
 
 ################################################################################

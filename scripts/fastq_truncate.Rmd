@@ -57,7 +57,7 @@ opt = parse_args(opt_parser)
 First things first: the file names are really long and contain redundant information, so I'll rename them to remove the unnecessary bits.
 ```{r rename files}
 
-#data_path <- "~/projects/thesis/data/test_bal"
+#data_path <- "~/thesis/data/zymo_neat"
 data_path <- opt$data
 raw_path <- file.path(data_path, "raw")
 
@@ -74,7 +74,7 @@ if (str_detect(fastqs[1], "^lane1-")){
     new_name <- str_replace(new_name, "_S\\d{3}_L001", "")
     new_name <- str_replace(new_name, "_001", "")
     #new_name <- str_replace(new_name, "-", ".")
-    file.rename(file.path(raw_path, fastqs[i]), new_name)
+    file.rename(file.path(raw_path, fastqs[i]), file.path(raw_path, new_name))
   }
 }
 

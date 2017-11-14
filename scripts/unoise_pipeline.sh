@@ -9,9 +9,9 @@
 
 
 # Set the default input file, output directory, and raw merged read file
-INFILE=~/projects/thesis/data/dilution_w_blank/filtered/pooled_filtered.fastq
-OUTDIR=~/projects/thesis/results/dilution_w_blank/unoise
-RAW_MERGED_FILE=~/projects/thesis/data/dilution_w_blank/merged/pooled_merged.fastq
+INFILE=~/thesis/data/dilution/filtered/pooled_filtered.fastq
+OUTDIR=~/thesis/results/dilution/unoise
+RAW_MERGED_FILE=~/thesis/data/dilution/merged/pooled_merged.fastq
 
 # Parse command-line options
 while [[ $# -gt 0 ]]

@@ -4,14 +4,14 @@
 ### dataset was processed, including the final parameters. It can
 ### also be run to re-process all datasets if desired.
 
-DATA=~/projects/thesis/data
-RESULTS=~/projects/thesis/results
+DATA=~/thesis/data
+RESULTS=~/thesis/results
 
 # Process dilution series with extraction blank
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Zymo dilution series with blank sample...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/dilution_w_blank \
 		    -f 230 -b 210 \
@@ -25,10 +25,10 @@ run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
 
 
 # Process dilution series without extraction blank
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Zymo dilution series (without blank)...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/dilution \
 		    -f 230 -b 210 \
@@ -42,10 +42,10 @@ run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution \
 
 
 # Process only the "neat" sample from the dilution series
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Zymo neat sample...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/zymo_neat \
 		    -f 230 -b 210 \
@@ -59,10 +59,10 @@ run_all_pipelines.sh -i $DATA/zymo_neat -o $RESULTS/zymo_neat \
 
 
 # Process the "balanced" dataset from Schirmer, et al.
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Schirmer balanced sample...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/schirmer_balanced \
 		    -f 240 -b 220 \
@@ -76,10 +76,10 @@ run_all_pipelines.sh -i $DATA/schirmer_balanced -o $RESULTS/schirmer_balanced \
 
 
 # Process dataset 130403 from Kozich, et al.
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Kozich Mock 1 sample...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/kozich_130403 \
 		    -f 240 -b 220 \
@@ -92,10 +92,10 @@ run_all_pipelines.sh -i $DATA/kozich_130403 -o $RESULTS/kozich_130403 \
 		     -s 220 -l 225
 
 # Process dataset metaID-46 from D'Amore, et al.
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing D'Amore balanced sample...\n"
-printf "\n**********************************************************************\n"
+printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/damore_balanced \
 		    -f 250 -b 240 \
