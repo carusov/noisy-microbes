@@ -54,10 +54,10 @@ Next, define the working directory and file paths.
 #data_path <- "~/projects/thesis/data/test_bal"
 data_path <- opt$input     # parent directory for raw and filtered data
 #result_path <- "~/projects/thesis/results/test_bal"
-result_path <- opt$output    # parent directory for outputs of read processsing methods
+dada2_path <- opt$output    # directory for outputs of DADA2 read processsing
 #ref_path <- "~/projects/thesis/references"    # directory containing reference databases
 raw_path <- file.path(data_path, "raw")     # directory containing raw read files
-dada2_path <- file.path(result_path, "dada2")     # directory where DADA2 processing results will be stored
+#dada2_path <- file.path(result_path, "dada2")     # directory where DADA2 processing results will be stored
 filt_path <- file.path(dada2_path, "filtered")     # directory where filtered reads will be stored
 
 if (!file_test("-d", dada2_path)) dir.create(dada2_path)
