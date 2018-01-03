@@ -16,7 +16,7 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/dilution_w_blank \
 		    -f 230 -b 210 \
 		    -s 220 -l 225 \
-		    -d 30 -p 50 \
+		    -d 30 -p 80 \
 		    -e 2.0 -n 0
 
 run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
@@ -33,7 +33,7 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/dilution \
 		    -f 230 -b 210 \
 		    -s 220 -l 225 \
-		    -d 30 -p 50 \
+		    -d 30 -p 80 \
 		    -e 2.0 -n 0
 
 run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution \
@@ -50,7 +50,7 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/zymo_neat \
 		    -f 230 -b 210 \
 		    -s 220 -l 225 \
-		    -d 30 -p 50 \
+		    -d 30 -p 80 \
 		    -e 2.0 -n 0
 
 run_all_pipelines.sh -i $DATA/zymo_neat -o $RESULTS/zymo_neat \
