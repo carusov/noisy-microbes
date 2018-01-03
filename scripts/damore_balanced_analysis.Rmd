@@ -17,9 +17,9 @@ library(stringr)
 library(Biostrings)
 library(tidyverse)
 
-result_path <- "~/projects/thesis/results/damore_balanced"
-ref_path <- "~/projects/thesis/references"
-analysis_path <- "~/projects/thesis/analysis/damore_balanced"
+result_path <- "~/thesis/results/damore_balanced"
+ref_path <- "~/thesis/references"
+analysis_path <- "~/thesis/analysis/damore_balanced"
 
 if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
@@ -450,6 +450,8 @@ summary_table <- data.frame(method = methods, total = method_counts, hits = meth
                         pct_cont = method_pct_cont, pct_other = method_pct_other,
                         row.names = NULL, check.names = FALSE)
 summary_table
+
+write.table(summary_table, file = file.path(analysis_path, "summary_table.tsv"), sep = "\t", row.names = FALSE)
 
 ```
 
