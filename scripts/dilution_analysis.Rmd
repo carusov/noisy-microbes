@@ -18,9 +18,9 @@ library(Biostrings)
 library(tidyverse)
 library(ShortRead)
 
-result_path <- "~/projects/thesis/results/dilution"
-ref_path <- "~/projects/thesis/references"
-analysis_path <- "~/projects/thesis/analysis/dilution"
+result_path <- "~/thesis/results/dilution"
+ref_path <- "~/thesis/references"
+analysis_path <- "~/thesis/analysis/dilution"
 
 if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
@@ -280,8 +280,10 @@ countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
   }
   
   if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
-    stop("The sequence table must only contain column vectors of type 'integer'.")
+    stop("The sequence table must only contain column vectors of type 'numeric' or 'integer'.")
   }
+  
+  
   
   rmat <- matrix(0, nrow = ncol(seq_tab), ncol = (max_dist - min_dist) + 1, 
                  dimnames = list(colnames(seq_tab), paste(min_dist:max_dist, "off")))
@@ -1114,6 +1116,101 @@ Plot ratio of dada2 ASV_3 to ASV_8.
 # ggplot(ratio, aes(x = sample, y = ratio)) +
 #   geom_line() +
 #   geom_point()
+
+```
+
+
+Here, I'm going to perform a very simple analysis with the `phyloseq` package. The idea is to mimic a "typical" pre-processing analysis that a microbiome researcher might do with a dataset of biological sample(s). Namely, I'm going to investigate the effect of two common filtering/data reduction techniques applied to the already-clustered sequence/OTU tables:
+1. Filtering candidate sequences/OTUs using a relative abundance threshold (e.g. 0.1% of total sample read count)
+2. Combining similar sequences/OTUs using a taxonomy table by agglomerating to the genus level
+First, I'll create `phyloseq` object to facilitate the analysis.
+```{r create phyloseq}
+
+library("phyloseq")
+
+# extract sequence matrices of read counts only from the method sequence tibbles
+seq_mats <- lapply(method_tables, function(mt){
+  seq_mat <- as.matrix(mt[, sample_names])
+  rownames(seq_mat) <- mt$id
+  return(seq_mat)
+})
+
+# load taxonomy tables
+tax_mats <- lapply(list.files(result_path), function(f){
+  tax_table <- read.table(file.path(result_path, f, paste0(f, "_taxa.txt")), header = TRUE, sep = "\t")
+  tax_mat <- as.matrix(tax_table)
+  return(tax_mat)
+})
+names(tax_mats) <- list.files(result_path)
+tax_mats <- tax_mats[methods]
+
+# extract sequences from taxonomy tables and convert to DNAStringSet
+seqs_list <- lapply(tax_mats, function(t) DNAStringSet(t[, 1]))
+
+# remove sequences from taxonomy tables
+tax_mats <- lapply(tax_mats, function(t) t[, -1])
+
+# construct phyloseq OTU and taxonomy tables
+otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
+tax_tabs <- lapply(tax_mats, tax_table)
+
+# construct phyloseq objects
+physeqs <- mapply(phyloseq, otu_tabs, tax_tabs, seqs_list, SIMPLIFY = FALSE)
+
+# remove intermediate objects
+rm(seq_mats, tax_mats, seqs_list, otu_tabs, tax_tabs)
+
+```
+
+
+Now I'll implement the filtering described above.
+```{r phyloseq filter}
+
+# convert sequence tables to relative abundances
+read_counts <- lapply(physeqs, sample_sums)
+physeqs.rel <- lapply(physeqs, transform_sample_counts, function(x) x / sum(x))
+
+# remove observations that are below 0.1% relative abundance
+physeqs.ab0.1 <- lapply(physeqs.rel, function(ps) {
+  transform_sample_counts(ps, function(x) ifelse(x >= 1e-3, x, 0))
+})
+physeqs.ab0.1 <- lapply(physeqs.ab0.1, function(ps) {
+  prune_taxa(taxa_sums(ps) > 0, ps)
+})
+invisible(mapply(function(ps, psa, id) cat("Total number of mock community sequences before filtering", toupper(id), "table:", ntaxa(ps), "\n",
+                                           "Total number after filtering out sequences below 0.1% relative abundance:", ntaxa(psa), "\n\n"),
+                 physeqs, physeqs.ab0.1, names(physeqs)))
+
+# alternatively, agglomerate each OTU table to the genus level
+physeqs.genus <- lapply(physeqs, tax_glom, taxrank = "Genus", NArm = FALSE)
+
+# now apply both filters in sequence
+physeqs.ab0.1.genus <- lapply(physeqs.ab0.1, tax_glom, taxrank = "Genus", NArm = FALSE)
+
+```
+
+
+Finally, convert the `phyloseq` OTU tables back to tibbles, and annotate them as was done above.
+```{r annotate filtered tables}
+
+# extract OTU tables from phyloseq objects
+method_tables.filt <- mapply(function(ps, rc) {
+  table <- otu_table(ps) 
+  table <- sweep(table, MARGIN = 2, STATS = rc, `*`)
+  table <- table %>% as.data.frame() %>% rownames_to_column(var = "id") %>% as.tibble()
+  table$sequence <- refseq(ps) %>% as.character()
+  return(table)
+  },
+  physeqs.ab0.1.genus, read_counts, SIMPLIFY = FALSE)
+
+# annotate the filtered OTU tables
+method_tables.filt <- mapply(function(mf, mt) {
+  midx <- match(mf$sequence, mt$sequence)
+  vars <- c("id", "dist_to_ref", "hit", "noisy", "ref_like", "perfect", "one_off", "contaminant", "other", "consensus", "dilution_cor")
+  ann_tab <- mt[midx, vars]
+  ann_tab <- full_join(mf, ann_tab, by = "id")
+  return(ann_tab)
+}, method_tables.filt, method_tables, SIMPLIFY = FALSE)
 
 ```
 
