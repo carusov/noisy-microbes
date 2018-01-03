@@ -82,7 +82,7 @@ sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
 
 ```
 
-The quality isn't great for most of the read sets. For the "Neat" sample, I'll trim the forward reads at position 230 for now, and the reverse reads at position 210. I'm also trimming the first 10 nucleotides-- the Illumina "burn-in".
+The quality isn't great for most of the read sets. For the "Neat" sample, I'll trim the forward reads at position 230 for now, and the reverse reads at position 210. I'm also trimming the first 15 nucleotides-- the Illumina "burn-in".
 ```{r filter}
 
 # Define file names for the filtered reads
