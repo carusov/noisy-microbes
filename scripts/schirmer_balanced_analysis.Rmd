@@ -17,9 +17,9 @@ library(stringr)
 library(Biostrings)
 library(tidyverse)
 
-result_path <- "~/projects/thesis/results/schirmer_balanced"
-ref_path <- "~/projects/thesis/references"
-analysis_path <- "~/projects/thesis/analysis/schirmer_balanced"
+result_path <- "~/thesis/results/schirmer_balanced"
+ref_path <- "~/thesis/references"
+analysis_path <- "~/thesis/analysis/schirmer_balanced"
 
 if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
@@ -438,6 +438,8 @@ summary_table <- data.frame(method = methods, total = method_counts, hits = meth
                         row.names = NULL, check.names = FALSE)
 summary_table
 
+write.table(summary_table, file = file.path(analysis_path, "summary_table.tsv"), sep = "\t", row.names = FALSE)
+
 ```
 
 
@@ -515,22 +517,56 @@ read_hist
 Create plots to show relative strength of signal (reference hits) to noise (non-reference hits).
 ```{r snr plots}
 
+library(ggbeeswarm)
+
 # ref vs. non-ref boxplots, raw counts
-snr_box <- ggplot(data = all_gg) +
+snr_box <- ggplot(data = all_gg, aes(x = method, y = log10, fill = factor(hit, levels = c(TRUE, FALSE)))) +
   geom_boxplot(aes(x = method, y = log10, fill = factor(hit, levels = c(TRUE, FALSE)))) +
+#  geom_jitter(width = 0.25, height = 0.25, aes(color = factor(hit, levels = c(TRUE, FALSE))), alpha = 0.5) +
   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
+          subtitle = "Schirmer balanced mock community", x = "method", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+#  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("green", "red")) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_box
 
 # ref vs. non-ref violin plots, raw counts
-snr_violin <- ggplot(data = all_gg) +
-  geom_violin(aes(x = method, y = log10, fill = factor(hit, levels = c(T, F)))) +
+snr_violin <- ggplot(data = all_gg, aes(x = method, y = log10)) +
+#  geom_violin(aes(x = method, y = log10, fill = factor(hit, levels = c(T, F)))) +
+  geom_beeswarm(aes(color = factor(hit, levels = c(T, F))), dodge.width = 0.75) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
+          subtitle = "Schirmer balanced mock community", x = "method", y = "log10(read counts)") +
+#  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_violin
+
+```{r snr plots}
+
+library(ggbeeswarm)
+
+# ref vs. non-ref boxplots, raw counts
+snr_box <- ggplot(data = all_gg, aes(x = method, y = log10, fill = factor(hit, levels = c(TRUE, FALSE)))) +
+  geom_boxplot(aes(x = method, y = log10, fill = factor(hit, levels = c(TRUE, FALSE)))) +
+#  geom_jitter(width = 0.25, height = 0.25, aes(color = factor(hit, levels = c(TRUE, FALSE))), alpha = 0.5) +
+  labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = "Schirmer balanced mock community", x = "method", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+#  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("green", "red")) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_box
+
+# ref vs. non-ref violin plots, raw counts
+snr_violin <- ggplot(data = all_gg, aes(x = method, y = log10)) +
+#  geom_violin(aes(x = method, y = log10, fill = factor(hit, levels = c(T, F)))) +
+  geom_beeswarm(aes(color = factor(hit, levels = c(T, F))), dodge.width = 0.75) +
+  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = "Schirmer balanced mock community", x = "method", y = "log10(read counts)") +
+#  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
   theme(legend.position = c(0.95, 0.05),
         legend.justification = c(1, 0))
 snr_violin
@@ -581,8 +617,9 @@ comp_bar <- ggplot(data_gg, aes(x = method, y = count)) +
                      values = c(bright = 1, dull = 1), 
                      guide = guide_legend(override.aes = list(fill = c(hit_colors[4], "#AEAEAE")), 
                                           keywidth = NULL, keyheight = NULL)) +
-  labs(title = "Relative composition of 'neat' sample processed by different methods", 
-       x = "sample dilution", y = "fraction of sample") +
+  labs(title = "Relative composition of sample processed by different methods", 
+       subtitle = "Schirmer balanced mock community",
+       x = "method", y = "fraction of sample") +
   theme(legend.position = "right", legend.title = element_text(size = 12), 
         axis.text = element_text(size = 12),
         axis.title = element_text(size = 16),
