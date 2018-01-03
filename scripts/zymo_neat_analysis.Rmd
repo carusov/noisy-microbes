@@ -17,9 +17,9 @@ library(stringr)
 library(Biostrings)
 library(tidyverse)
 
-result_path <- "~/projects/thesis/results/zymo_neat"
-ref_path <- "~/projects/thesis/references"
-analysis_path <- "~/projects/thesis/analysis/zymo_neat"
+result_path <- "~/thesis/results/zymo_neat"
+ref_path <- "~/thesis/references"
+analysis_path <- "~/thesis/analysis/zymo_neat"
 
 if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
@@ -391,7 +391,7 @@ isNOff <- function(seq_tab, blast_file, N = 1){
   fulls <- blast_tab[ blast_tab$aln_length == nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]), ]
   one_offs <- fulls[ (fulls$mismatches == 1 & fulls$gaps == 0) | (fulls$mismatches == 0 & fulls$gaps == 1), ]   #alternate code
   
-  # now check length-1 hits with 100% identity
+  # now check length - N hits with 100% identity
   partials <- blast_tab[ blast_tab$aln_length == (nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]) - N), ]
   one_offs <- rbind(one_offs, partials[partials$identity == 100, ])
   is_one_off <- seq_tab$id %in% one_offs$seqID
@@ -437,6 +437,8 @@ summary_table <- data.frame(method = methods, total = method_counts, hits = meth
                         other = method_other, pct_hit = method_pct_hit, pct_noisy = method_pct_noisy, 
                         pct_cont = method_pct_cont, pct_other = method_pct_other,
                         row.names = NULL, check.names = FALSE)
+
+write.table(summary_table, file = file.path(analysis_path, "summary_table.tsv"), sep = "\t", row.names = FALSE)
 
 ```
 
