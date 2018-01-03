@@ -19,7 +19,7 @@ RTRUNC=210
 
 # Set the default merge parameters
 MAXDIFFS=30
-PCTID=50
+PCTID=80
 MINMERGELEN=220
 MAXMERGELEN=225
 
@@ -84,8 +84,8 @@ printf "\nWORKING DIRECTORY = ""${WDIR}""\n"
 # Create the 'truncated' directory, if necessary
 if [ ! -d $WDIR/truncated ]; then
     mkdir $WDIR/truncated
-else
-    rm $WDIR/truncated/*
+#else
+#    rm $WDIR/truncated/*
 fi
 
 # Create the 'merged' directory, if necessary
@@ -111,9 +111,13 @@ fi
 
 # First, run the .Rmd script that truncates the .fastq reads
 # Make sure we have the latest version of the script
-cd $SCRIPTS
-rmd2r.R -i fastq_truncate.Rmd
-Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -b $RTRUNC
+if [ ! $(ls -A "$WDIR"/truncated) ];then
+    TMP=$PWD
+    cd $SCRIPTS
+    rmd2r.R -i fastq_truncate.Rmd
+    Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -b $RTRUNC
+    cd $TMP
+fi
 
 ### Merge reads from individual samples to get stats for publication
 for fq in $(ls $WDIR/truncated/*_R1.fastq)
