@@ -74,7 +74,15 @@ do
     shift
 done
 
-printf "\nWORKING DIRECTORY = ""${WDIR}""\n"
+printf "\nWORKING DIRECTORY = %s" "$WDIR"
+printf "\nForward reads will be truncated at position %d" $FTRUNC
+printf "\nReverse reads will be truncated at position %d" $RTRUNC
+printf "\nThe maximum allowed merge differences are %d" $MAXDIFFS
+printf "\nThe minimum percent merge identity is %f" $PCTID
+printf "\nThe minimum merge length is %d" $MINMERGELEN
+printf "\nThe maximum merge length is %d" $MAXMERGELEN
+printf "\nThe maximum expected errors is %f" $MAXEE
+printf "\nThe maximum number of Ns is %d" $MAXNS
 
 # Create the output directory, if necessary
 #if [ ! -d $WDIR ]; then
