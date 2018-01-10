@@ -18,6 +18,8 @@ library(Biostrings)
 library(tidyverse)
 library(ShortRead)
 
+options(tibble.print_min = 100, tibble.print_max = 40)
+
 result_path <- "~/thesis/results/dilution"
 ref_path <- "~/thesis/references"
 analysis_path <- "~/thesis/analysis/dilution"
@@ -30,9 +32,8 @@ if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
 Load and inspect the tables from each clustering method. Modify tables as necessary so that they all have the following format:
 
-1. Rows are OTUs or SVs, and columns are samples
-2. Row names are the OTU/SV identifiers
-3. Column names are the sample names
+1. Rows are OTUs or SVs
+2. The first column is the OTU/SV identifier, and the remaining columns are samples' abundances
 4. There are no comment lines (just a header with column names)
 
 After modifying the format of each table, write it back to a tab-separated '.txt' file.
@@ -47,7 +48,7 @@ sample_names <- colnames(uclust_table)[-1]
 sample_names <- sample_names[order(sample_names)]
 uclust_table <- uclust_table %>% select(id, noquote(sample_names))
 uclust_table
-write.table(uclust_table, file = file.path(result_path, "uclust/uclust_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(uclust_table, file.path(result_path, "uclust/uclust_table.txt"))
 
 # load UCLUST representative sequences
 uclust_seqs <- readDNAStringSet(file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta"))
@@ -67,7 +68,7 @@ colnames(uparse_table)[1] <- "id"
 uparse_table$id <- str_replace(uparse_table$id, "OTU", "OTU_")
 colnames(uparse_table)[-1] <- sample_names
 uparse_table
-write.table(uparse_table, file = file.path(result_path, "uparse/uparse_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(uparse_table, file.path(result_path, "uparse/uparse_table.txt"))
 
 # load UPARSE representative sequences
 uparse_seqs <- readDNAStringSet(file.path(result_path, "uparse/otus.fa"))
@@ -86,7 +87,7 @@ colnames(unoise_table)[1] <- "id"
 unoise_table$id <- str_replace(unoise_table$id, "OTU", "ZOTU_")
 colnames(unoise_table)[-1] <- sample_names
 unoise_table
-write.table(unoise_table, file = file.path(result_path, "unoise/unoise_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(unoise_table, file.path(result_path, "unoise/unoise_table.txt"))
 
 # load UNOISE sequences
 unoise_seqs <- readDNAStringSet(file.path(result_path, "unoise/zotus.fa"))
@@ -130,7 +131,7 @@ if (length(med_seqs.chimeras) > 0){
   med_seqs <- med_seqs[!med_seqs %in% med_seqs.chimeras]
 }
 
-write.table(med_table, file = file.path(result_path, "med/med_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(med_table, file.path(result_path, "med/med_table.txt"))
 
 ```
 
@@ -146,7 +147,7 @@ names(deblur_seqs) <- paste0("sOTU_", 1:length(deblur_seqs))
 deblur_table$id <- names(deblur_seqs)
 deblur_table <- deblur_table %>% select(id, noquote(sample_names))
 deblur_table
-write.table(deblur_table, file = file.path(result_path, "deblur/deblur_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(deblur_table, file.path(result_path, "deblur/deblur_table.txt"))
 
 ```
 
@@ -161,7 +162,7 @@ dada2_seqs <- dada2_table$id
 names(dada2_seqs) <- paste0("ASV_", 1:length(dada2_seqs))
 dada2_table$id <- names(dada2_seqs)
 dada2_table
-write.table(dada2_table, file = file.path(result_path, "dada2/dada2_table.txt"), quote = FALSE, sep = "\t")
+write_tsv(dada2_table, file.path(result_path, "dada2/dada2_table.txt"))
 
 ```
 
@@ -313,7 +314,7 @@ countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
 }
 
 # define a function that returns whether sequences of a sequence table are "noisy"
-isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
+isRefNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
   if (max(colSums(dist_mat == 0)) > 1) {
     print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
     print("This may result in inaccurate counts of noisy seuqences.")
@@ -356,26 +357,26 @@ med_table$dist_to_ref <- apply(med_to_ref, 1, min)
 deblur_table$dist_to_ref <- apply(deblur_to_ref, 1, min)
 dada2_table$dist_to_ref <- apply(dada2_to_ref, 1, min)
 
-uclust_table$hit <- uclust_table$dist_to_ref == 0
-uparse_table$hit <- uparse_table$dist_to_ref == 0
-unoise_table$hit <- unoise_table$dist_to_ref == 0
-med_table$hit <- med_table$dist_to_ref == 0
-deblur_table$hit <- deblur_table$dist_to_ref == 0
-dada2_table$hit <- dada2_table$dist_to_ref == 0
+uclust_table$reference <- uclust_table$dist_to_ref == 0
+uparse_table$reference <- uparse_table$dist_to_ref == 0
+unoise_table$reference <- unoise_table$dist_to_ref == 0
+med_table$reference <- med_table$dist_to_ref == 0
+deblur_table$reference <- deblur_table$dist_to_ref == 0
+dada2_table$reference <- dada2_table$dist_to_ref == 0
 
-uclust_table$noisy <- isNoisy(uclust_table[, sample_names], uclust_to_ref, 1, 3)
-uparse_table$noisy <- isNoisy(uparse_table[, sample_names], uparse_to_ref, 1, 3)
-unoise_table$noisy <- isNoisy(unoise_table[, sample_names], unoise_to_ref, 1, 3)
-med_table$noisy <- isNoisy(med_table[, sample_names], med_to_ref, 1, 3)
-deblur_table$noisy <- isNoisy(deblur_table[, sample_names], deblur_to_ref, 1, 3)
-dada2_table$noisy <- isNoisy(dada2_table[, sample_names], dada2_to_ref, 1, 3)
+uclust_table$ref_noisy <- isRefNoisy(uclust_table[, sample_names], uclust_to_ref, 1, 3)
+uparse_table$ref_noisy <- isRefNoisy(uparse_table[, sample_names], uparse_to_ref, 1, 3)
+unoise_table$ref_noisy <- isRefNoisy(unoise_table[, sample_names], unoise_to_ref, 1, 3)
+med_table$ref_noisy <- isRefNoisy(med_table[, sample_names], med_to_ref, 1, 3)
+deblur_table$ref_noisy <- isRefNoisy(deblur_table[, sample_names], deblur_to_ref, 1, 3)
+dada2_table$ref_noisy <- isRefNoisy(dada2_table[, sample_names], dada2_to_ref, 1, 3)
 
-uclust_table$ref_like <- uclust_table$hit | uclust_table$noisy
-uparse_table$ref_like <- uparse_table$hit | uparse_table$noisy
-unoise_table$ref_like <- unoise_table$hit | unoise_table$noisy
-med_table$ref_like <- med_table$hit | med_table$noisy
-deblur_table$ref_like <- deblur_table$hit | deblur_table$noisy
-dada2_table$ref_like <- dada2_table$hit | dada2_table$noisy
+uclust_table$ref_like <- uclust_table$reference | uclust_table$ref_noisy
+uparse_table$ref_like <- uparse_table$reference | uparse_table$ref_noisy
+unoise_table$ref_like <- unoise_table$reference | unoise_table$ref_noisy
+med_table$ref_like <- med_table$reference | med_table$ref_noisy
+deblur_table$ref_like <- deblur_table$reference | deblur_table$ref_noisy
+dada2_table$ref_like <- dada2_table$reference | dada2_table$ref_noisy
 
 ```
 
@@ -426,7 +427,7 @@ dada2_blast <- as.tibble(read.table(file.path(analysis_path, "dada2_blast.txt"),
 Define functions to identify blast hits that are exact matches and those that are one or more nucleotides off.
 ```{r blast parsing functions}
 
-isPerfectHit <- function(seq_tab, blast_file){
+isBlastHit <- function(seq_tab, blast_file){
   blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
@@ -435,23 +436,25 @@ isPerfectHit <- function(seq_tab, blast_file){
   return(seq_tab$id %in% perfect_hits$seqID)
 }
 
-isNOff <- function(seq_tab, blast_file, N = 1){
+
+isBlastNoisy <- function(seq_tab, blast_file, min_off = 1, max_off = 3){
   blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
                                     col.names = c("seqID", "subjectIDs", "kingdom", "identity", "aln_length", "mismatches", 
                                                   "gapopens", "gaps", "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
-  # find full-length hits with one mismatch or indel
-  fulls <- blast_tab[ blast_tab$aln_length == nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]), ]
-  one_offs <- fulls[ (fulls$mismatches == 1 & fulls$gaps == 0) | (fulls$mismatches == 0 & fulls$gaps == 1), ]   #alternate code
   
-  # now check length-1 hits with 100% identity
-  partials <- blast_tab[ blast_tab$aln_length == (nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)]) - N), ]
-  one_offs <- rbind(one_offs, partials[partials$identity == 100, ])
-  is_one_off <- seq_tab$id %in% one_offs$seqID
+  # annotate blast table to facilitate computation of differences between query and subject (nt) sequences
+  blast_tab$seq_len <- nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)])  # get lengths of query sequences
+  blast_tab$lev_dist <- blast_tab$mismatches + blast_tab$gaps  # compute Levenshtein distances, not counting terminal gaps
+  blast_tab$cov_dist <- pmax(blast_tab$seq_len - blast_tab$aln_length, 0)  # compute number of terminal gaps, if any
+  blast_tab$tot_dist <- blast_tab$lev_dist + blast_tab$cov_dist  # sum the two to get the total distance between sequences
   
-  hits <- isPerfectHit(seq_tab, blast_file)
-  is_one_off[hits] <- FALSE   # remove queries that also have perfect hits
+  noisies <- blast_tab[between(blast_tab$tot_dist, min_off, max_off), ]
+  is_noisy <- seq_tab$id %in% noisies$seqID
   
-  return(is_one_off)
+  hits <- isBlastHit(seq_tab, blast_file)
+  is_noisy[hits] <- FALSE
+  
+  return(is_noisy)
 }
 
 ```
@@ -460,29 +463,29 @@ isNOff <- function(seq_tab, blast_file, N = 1){
 Annotate sequence tables with results from BLAST analysis.
 ```{r annotate blast results}
 
-uclust_table$perfect <- isPerfectHit(uclust_table, file.path(analysis_path, "uclust_blast.txt")) & !uclust_table$hit
-uclust_table$one_off <- isNOff(uclust_table, file.path(analysis_path, "uclust_blast.txt"), 1)
-uclust_table <- uclust_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+uclust_table$contaminant <- isBlastHit(uclust_table, file.path(analysis_path, "uclust_blast.txt")) & !uclust_table$reference
+uclust_table$contam_noisy <- isBlastNoisy(uclust_table, file.path(analysis_path, "uclust_blast.txt"), 1, 3)
+uclust_table <- uclust_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
-uparse_table$perfect <- isPerfectHit(uparse_table, file.path(analysis_path, "uparse_blast.txt")) & !uparse_table$hit
-uparse_table$one_off <- isNOff(uparse_table, file.path(analysis_path, "uparse_blast.txt"), 1)
-uparse_table <- uparse_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+uparse_table$contaminant <- isBlastHit(uparse_table, file.path(analysis_path, "uparse_blast.txt")) & !uparse_table$reference
+uparse_table$contam_noisy <- isBlastNoisy(uparse_table, file.path(analysis_path, "uparse_blast.txt"), 1, 3)
+uparse_table <- uparse_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
-unoise_table$perfect <- isPerfectHit(unoise_table, file.path(analysis_path, "unoise_blast.txt")) & !unoise_table$hit
-unoise_table$one_off <- isNOff(unoise_table, file.path(analysis_path, "unoise_blast.txt"), 1)
-unoise_table <- unoise_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+unoise_table$contaminant <- isBlastHit(unoise_table, file.path(analysis_path, "unoise_blast.txt")) & !unoise_table$reference
+unoise_table$contam_noisy <- isBlastNoisy(unoise_table, file.path(analysis_path, "unoise_blast.txt"), 1, 3)
+unoise_table <- unoise_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
-med_table$perfect <- isPerfectHit(med_table, file.path(analysis_path, "med_blast.txt")) & !med_table$hit
-med_table$one_off <- isNOff(med_table, file.path(analysis_path, "med_blast.txt"), 1)
-med_table <- med_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+med_table$contaminant <- isBlastHit(med_table, file.path(analysis_path, "med_blast.txt")) & !med_table$reference
+med_table$contam_noisy <- isBlastNoisy(med_table, file.path(analysis_path, "med_blast.txt"), 1, 3)
+med_table <- med_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
-deblur_table$perfect <- isPerfectHit(deblur_table, file.path(analysis_path, "deblur_blast.txt")) & !deblur_table$hit
-deblur_table$one_off <- isNOff(deblur_table, file.path(analysis_path, "deblur_blast.txt"), 1)
-deblur_table <- deblur_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+deblur_table$contaminant <- isBlastHit(deblur_table, file.path(analysis_path, "deblur_blast.txt")) & !deblur_table$reference
+deblur_table$contam_noisy <- isBlastNoisy(deblur_table, file.path(analysis_path, "deblur_blast.txt"), 1, 3)
+deblur_table <- deblur_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
-dada2_table$perfect <- isPerfectHit(dada2_table, file.path(analysis_path, "dada2_blast.txt")) & !dada2_table$hit
-dada2_table$one_off <- isNOff(dada2_table, file.path(analysis_path, "dada2_blast.txt"), 1)
-dada2_table <- dada2_table %>% mutate(contaminant = perfect | one_off, other = !ref_like & !contaminant)
+dada2_table$contaminant <- isBlastHit(dada2_table, file.path(analysis_path, "dada2_blast.txt")) & !dada2_table$reference
+dada2_table$contam_noisy <- isBlastNoisy(dada2_table, file.path(analysis_path, "dada2_blast.txt"), 1, 3)
+dada2_table <- dada2_table %>% mutate(contam_like = contaminant | contam_noisy, other = !ref_like & !contam_like)
 
 # Annotate "consensus" sequences-- that are observed in every sample
 uclust_table$consensus <- apply(uclust_table[, sample_names], 1, min) > 0
