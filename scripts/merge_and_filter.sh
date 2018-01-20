@@ -82,7 +82,7 @@ printf "\nThe minimum percent merge identity is %f" $PCTID
 printf "\nThe minimum merge length is %d" $MINMERGELEN
 printf "\nThe maximum merge length is %d" $MAXMERGELEN
 printf "\nThe maximum expected errors is %f" $MAXEE
-printf "\nThe maximum number of Ns is %d" $MAXNS
+printf "\nThe maximum number of Ns is %d\n" $MAXNS
 
 # Create the output directory, if necessary
 #if [ ! -d $WDIR ]; then
@@ -145,7 +145,7 @@ do
     usearch -fastx_info $WDIR/merged/$nn \
 	    -output $WDIR/reports/$bn"_merged_info.txt"
 
-    rm $WDIR/merged/$nn
+#    rm $WDIR/merged/$nn
 done
 
 # Now filter the individual samples too, in case we need stats on the output of filtering
@@ -161,7 +161,7 @@ do
     usearch -fastx_info $WDIR/filtered/$nn \
 	    -output $WDIR/reports/$bn"_filtered_info.txt"
 
-    rm $WDIR/filtered/$nn
+#    rm $WDIR/filtered/$nn
 done
 
 ################################################################################
