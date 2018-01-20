@@ -9,6 +9,9 @@
 ### run remotely, on NCBI computers.
 ### Usage: blast_seqs.sh -i input_file [-o output_file]
 
+# Define default parameters
+TARGETS=10
+
 # Parse command-line options
 while [[ $# -gt 0 ]]
 do
@@ -25,7 +28,7 @@ do
 	    TARGETS="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: blast_seqs.sh -i in_file [-o out_file]\n"
+	    printf "\nUSAGE: blast_seqs.sh -i in_file [-o out_file] [-t max_targets]\n"
 	    exit;;
 	*)
 
@@ -34,11 +37,15 @@ do
     shift
 done
 
+printf "\nINPUT FILE: %s" "$INFILE"
+printf "\nOUTPUT FILE: %s" "$OUTFILE"
+printf "\nThe maximum number of targets per query is %d\n" $TARGETS
+
 if [ -z "$OUTFILE" ]; then
     OUTFILE=${INFILE%.*}.txt
 fi
 
 blastn -query "$INFILE" -db nt -out "$OUTFILE" \
        -task megablast -max_target_seqs 10 \
-       -outfmt "7 qseqid sseqid sskingdoms pident length mismatch gapopen gaps qstart qend sstart send evalue bitscore" \
+       -outfmt "7 qseqid qlen sseqid slen sskingdoms ssciname pident length nident mismatch gapopen gaps qstart qend sstart send evalue bitscore" \
        -remote
