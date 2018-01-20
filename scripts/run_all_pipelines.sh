@@ -60,9 +60,13 @@ do
     shift
 done
 
-printf "\nINPUT DIRECTORY = ""${INDIR}""\n"
-printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n"
-printf "REFERENCE DIRECTORY = ""${REFDIR}""\n\n"
+printf "\nINPUT DIRECTORY = "${INDIR}""
+printf "\nOUTPUT DIRECTORY = "${OUTDIR}""
+printf "\nREFERENCE DIRECTORY = "${REFDIR}""
+printf "\nForward reads will be truncated at position %d" $FTRUNC
+printf "\nReverse reads will be truncated at position %d" $RTRUNC
+printf "\nThe minimum merge length is %d" $MIN_LEN
+printf "\nThe maximum merge length is %d\n" $MAX_LEN
 
 # Create the output directory, if necessary
 if [ ! -d "$OUTDIR" ]; then
