@@ -8,20 +8,20 @@ DATA=~/thesis/data
 RESULTS=~/thesis/results
 
 # Process dilution series with extraction blank
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
-printf "\nProcessing Zymo dilution series with blank sample...\n"
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
-merge_and_filter.sh -w $DATA/dilution_w_blank \
-		    -f 230 -b 210 \
-		    -s 220 -l 225 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+#printf "\n**********************************************************************"
+#printf "\n**********************************************************************\n"
+#printf "\nProcessing Zymo dilution series with blank sample...\n"
+#printf "\n**********************************************************************"
+#printf "\n**********************************************************************\n"
+#merge_and_filter.sh -w $DATA/dilution_w_blank \
+#		    -f 230 -b 210 \
+#		    -s 220 -l 225 \
+#		    -d 30 -p 80 \
+#		    -e 2.0 -n 0
 
-run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
-		     -f 230 -b 210 \
-		     -s 220 -l 225
+#run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
+#		     -f 230 -b 210 \
+#		     -s 220 -l 225
 
 
 # Process dilution series without extraction blank
@@ -41,7 +41,7 @@ run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution \
 		     -s 220 -l 225
 
 
-# Process only the "neat" sample from the dilution series
+# Process just the "neat" sample from the dilution series
 printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Zymo neat sample...\n"
@@ -91,18 +91,18 @@ run_all_pipelines.sh -i $DATA/kozich_130403 -o $RESULTS/kozich_130403 \
 		     -f 240 -b 220 \
 		     -s 220 -l 225
 
-# Process dataset metaID-46 from D'Amore, et al.
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
-printf "\nProcessing D'Amore balanced sample...\n"
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
-merge_and_filter.sh -w $DATA/damore_balanced \
-		    -f 250 -b 240 \
-		    -s 258 -l 263 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+# Process dataset metaID-88 from D'Amore, et al.
+#printf "\n**********************************************************************"
+#printf "\n**********************************************************************\n"
+#printf "\nProcessing D'Amore balanced sample...\n"
+#printf "\n**********************************************************************"
+#printf "\n**********************************************************************\n"
+#merge_and_filter.sh -w $DATA/damore_balanced \
+#		    -f 250 -b 240 \
+#		    -s 258 -l 263 \
+#		    -d 30 -p 80 \
+#		    -e 2.0 -n 0
 
-run_all_pipelines.sh -i $DATA/damore_balanced -o $RESULTS/damore_balanced \
-		     -f 250 -b 240 \
-		     -s 258 -l 263
+#run_all_pipelines.sh -i $DATA/damore_balanced -o $RESULTS/damore_balanced \
+#		     -f 250 -b 240 \
+#		     -s 258 -l 263
