@@ -12,25 +12,6 @@ knitr::opts_chunk$set(echo = TRUE)
 #opts_knit$set(root.dir = "~/projects/thesis/data")
 ```
 
-```{r}
-#source("https://bioconductor.org/biocLite.R")
-#biocLite("dada2")
-library("dada2"); packageVersion("dada2")
-library("ggplot2")
-library("stringr")
-
-```
-
-##Filtering strategy
-
-There are two strategies I'm considering for quality filtering the raw .fastq files from the mock community dilution series sequencing experiment:
-
-1. Merge forward and reverse reads first, taking advantage of potentially improved posterior Q scores that result from overlapping reads, and then quality filter the merged reads based on expected errors. This approach entails the use of the `fastq_mergepairs` function in USEARCH.
-
-2. Truncate the low-quality heads and tails of forward and reverse reads independently, then merge the truncated reads, and finally quality filter the merged reads, again based on expected errors. This approach requires the use of the `fastqPairedFilter` function in DADA2 for the initial truncation step, since only this filter maintains the consistent ordering of the forward and reverse reads.
-
-Here, I'll use approach #2. In this script, I'm only performing truncation (as well as removing any residual phiX) with `fastqPairedFilter`, since I still want to merge the resulting .fastq files with USEARCH's `fastq_mergepairs` before doing quality filtering. I'll also use USEARCH to do quality filtering with `fastq_filter`. 
-
 
 ##Get working directory from command line
 
@@ -51,6 +32,28 @@ opt_parser = OptionParser(option_list=option_list)
 opt = parse_args(opt_parser)
 
 ```
+
+
+Set up the environment.
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("dada2")
+library("dada2"); packageVersion("dada2")
+library("ggplot2")
+library("stringr")
+
+```
+
+
+##Filtering strategy
+
+There are two strategies I'm considering for quality filtering the raw .fastq files from the mock community dilution series sequencing experiment:
+
+1. Merge forward and reverse reads first, taking advantage of potentially improved posterior Q scores that result from overlapping reads, and then quality filter the merged reads based on expected errors. This approach entails the use of the `fastq_mergepairs` function in USEARCH.
+
+2. Truncate the low-quality heads and tails of forward and reverse reads independently, then merge the truncated reads, and finally quality filter the merged reads, again based on expected errors. This approach requires the use of the `fastqPairedFilter` function in DADA2 for the initial truncation step, since only this filter maintains the consistent ordering of the forward and reverse reads.
+
+Here, I'll use approach #2. In this script, I'm only performing truncation (as well as removing any residual phiX) with `fastqPairedFilter`, since I still want to merge the resulting .fastq files with USEARCH's `fastq_mergepairs` before doing quality filtering. I'll also use USEARCH to do quality filtering with `fastq_filter`. 
 
 ##Rename files
 
