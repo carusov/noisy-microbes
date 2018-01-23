@@ -5,14 +5,6 @@ knitr::opts_chunk$set(echo = TRUE)
 #opts_knit$set(root.dir = "~/projects/thesis/data")
 
 ## ------------------------------------------------------------------------
-#source("https://bioconductor.org/biocLite.R")
-#biocLite("dada2")
-library("dada2"); packageVersion("dada2")
-library("ggplot2")
-library("stringr")
-
-
-## ------------------------------------------------------------------------
 
 library(optparse)
  
@@ -27,6 +19,14 @@ option_list = list(
  
 opt_parser = OptionParser(option_list=option_list)
 opt = parse_args(opt_parser)
+
+
+## ------------------------------------------------------------------------
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("dada2")
+library("dada2"); packageVersion("dada2")
+library("ggplot2")
+library("stringr")
 
 
 ## ----rename files--------------------------------------------------------
