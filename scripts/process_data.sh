@@ -6,6 +6,10 @@
 
 DATA=~/thesis/data
 RESULTS=~/thesis/results
+MAXDIFFS=10
+#PCTID=90
+MAXEE=2.0
+MAXN=0
 
 # Process dilution series with extraction blank
 #printf "\n**********************************************************************"
@@ -16,8 +20,8 @@ RESULTS=~/thesis/results
 #merge_and_filter.sh -w $DATA/dilution_w_blank \
 #		    -f 230 -b 210 \
 #		    -s 220 -l 225 \
-#		    -d 30 -p 80 \
-#		    -e 2.0 -n 0
+#		    -d $MAXDIFFS  \
+#		    -e $MAXEE -n $MAXN
 
 #run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
 #		     -f 230 -b 210 \
@@ -33,8 +37,8 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/dilution \
 		    -f 230 -b 210 \
 		    -s 220 -l 225 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+		    -d $MAXDIFFS  \
+		    -e $MAXEE -n $MAXN
 
 run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution \
 		     -f 230 -b 210 \
@@ -50,8 +54,8 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/zymo_neat \
 		    -f 230 -b 210 \
 		    -s 220 -l 225 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+		    -d $MAXDIFFS  \
+		    -e $MAXEE -n $MAXN
 
 run_all_pipelines.sh -i $DATA/zymo_neat -o $RESULTS/zymo_neat \
 		     -f 230 -b 210 \
@@ -67,8 +71,8 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/schirmer_balanced \
 		    -f 240 -b 220 \
 		    -s 258 -l 263 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+		    -d $MAXDIFFS  \
+		    -e $MAXEE -n $MAXN
 
 run_all_pipelines.sh -i $DATA/schirmer_balanced -o $RESULTS/schirmer_balanced \
 		     -f 240 -b 220 \
@@ -84,8 +88,8 @@ printf "\n**********************************************************************
 merge_and_filter.sh -w $DATA/kozich_130403 \
 		    -f 240 -b 220 \
 		    -s 220 -l 225 \
-		    -d 30 -p 80 \
-		    -e 2.0 -n 0
+		    -d $MAXDIFFS  \
+		    -e $MAXEE -n $MAXN
 
 run_all_pipelines.sh -i $DATA/kozich_130403 -o $RESULTS/kozich_130403 \
 		     -f 240 -b 220 \
@@ -100,8 +104,8 @@ run_all_pipelines.sh -i $DATA/kozich_130403 -o $RESULTS/kozich_130403 \
 #merge_and_filter.sh -w $DATA/damore_balanced \
 #		    -f 250 -b 240 \
 #		    -s 258 -l 263 \
-#		    -d 30 -p 80 \
-#		    -e 2.0 -n 0
+#		    -d $MAXDIFFS  \
+#		    -e $MAXEE -n $MAXN
 
 #run_all_pipelines.sh -i $DATA/damore_balanced -o $RESULTS/damore_balanced \
 #		     -f 250 -b 240 \
