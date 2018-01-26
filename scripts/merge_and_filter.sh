@@ -137,7 +137,6 @@ do
 	    -fastqout $WDIR/merged/$nn \
 	    -relabel @ \
 	    -fastq_maxdiffs $MAXDIFFS \
-#	    -fastq_pctid $PCTID \
 	    -fastq_minmergelen $MINMERGELEN \
 	    -fastq_maxmergelen $MAXMERGELEN \
 	    -report $WDIR/reports/$bn"_merge_report.txt"
@@ -189,7 +188,6 @@ usearch -fastq_mergepairs $WDIR/truncated/*R1.fastq \
 	-fastqout $WDIR/merged/pooled_merged.fastq \
 	-relabel @ \
 	-fastq_maxdiffs $MAXDIFFS \
-#	-fastq_pctid $PCTID \
 	-fastq_minmergelen $MINMERGELEN \
 	-fastq_maxmergelen $MAXMERGELEN \
         -report $WDIR/reports/pooled_merge_report.txt
