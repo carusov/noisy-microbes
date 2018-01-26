@@ -18,8 +18,8 @@ FTRUNC=230
 RTRUNC=210
 
 # Set the default merge parameters
-MAXDIFFS=30
-PCTID=80
+MAXDIFFS=10
+#PCTID=80
 MINMERGELEN=220
 MAXMERGELEN=225
 
@@ -137,7 +137,7 @@ do
 	    -fastqout $WDIR/merged/$nn \
 	    -relabel @ \
 	    -fastq_maxdiffs $MAXDIFFS \
-	    -fastq_pctid $PCTID \
+#	    -fastq_pctid $PCTID \
 	    -fastq_minmergelen $MINMERGELEN \
 	    -fastq_maxmergelen $MAXMERGELEN \
 	    -report $WDIR/reports/$bn"_merge_report.txt"
@@ -189,7 +189,7 @@ usearch -fastq_mergepairs $WDIR/truncated/*R1.fastq \
 	-fastqout $WDIR/merged/pooled_merged.fastq \
 	-relabel @ \
 	-fastq_maxdiffs $MAXDIFFS \
-	-fastq_pctid $PCTID \
+#	-fastq_pctid $PCTID \
 	-fastq_minmergelen $MINMERGELEN \
 	-fastq_maxmergelen $MAXMERGELEN \
         -report $WDIR/reports/pooled_merge_report.txt
