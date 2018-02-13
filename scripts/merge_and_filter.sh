@@ -74,15 +74,17 @@ do
     shift
 done
 
-printf "\nWORKING DIRECTORY = %s" "$WDIR"
-printf "\nForward reads will be truncated at position %d" $FTRUNC
-printf "\nReverse reads will be truncated at position %d" $RTRUNC
-printf "\nThe maximum allowed merge differences are %d" $MAXDIFFS
-printf "\nThe minimum percent merge identity is %f" $PCTID
-printf "\nThe minimum merge length is %d" $MINMERGELEN
-printf "\nThe maximum merge length is %d" $MAXMERGELEN
-printf "\nThe maximum expected errors is %f" $MAXEE
-printf "\nThe maximum number of Ns is %d\n" $MAXNS
+printf "\nWORKING DIRECTORY: %s" "$WDIR"
+printf "\n\nTRUNCATION parameters:"
+printf "\nForward read truncate position: %d" $FTRUNC
+printf "\nReverse read truncate position: %d" $RTRUNC
+printf "\n\nMERGE parameters:"
+printf "\nMaximum differences: %d" $MAXDIFFS
+printf "\nMinimum merge length: %d" $MINMERGELEN
+printf "\nMaximum merge length: %d" $MAXMERGELEN
+printf "\n\nFILTER parameters:"
+printf "\nMaximum expected errors: %0.2f" $MAXEE
+printf "\nMaximum Ns: %d\n\n" $MAXNS
 
 # Create the output directory, if necessary
 #if [ ! -d $WDIR ]; then
@@ -119,12 +121,11 @@ fi
 
 # First, run the .Rmd script that truncates the .fastq reads
 # Make sure we have the latest version of the script
-if [ ! $(ls -A "$WDIR"/truncated) ];then
-    TMP=$PWD
-    cd $SCRIPTS
+if [ ! "$(ls -A "$WDIR"/truncated)" ];then
+    pushd $SCRIPTS
     rmd2r.R -i fastq_truncate.Rmd
     Rscript $SCRIPTS/fastq_truncate.R -d $WDIR -f $FTRUNC -b $RTRUNC
-    cd $TMP
+    popd
 fi
 
 ### Merge reads from individual samples to get stats for publication
