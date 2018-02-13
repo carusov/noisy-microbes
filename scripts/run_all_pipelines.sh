@@ -47,6 +47,12 @@ do
 	-l|--max_len)
 	    MAX_LEN="$2"
 	    shift;;
+	-F|--maxee_F)
+	    MAXEE_F="$2"
+	    shift;;
+	-R|--maxee_R)
+	    MAXEE_R="$2"
+	    shift;;
 	-h|--help)
 	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory]\n"
 	    printf "\t\t\t [-o output_directory] [-r reference_directory]\n"
@@ -63,10 +69,13 @@ done
 printf "\nINPUT DIRECTORY = "${INDIR}""
 printf "\nOUTPUT DIRECTORY = "${OUTDIR}""
 printf "\nREFERENCE DIRECTORY = "${REFDIR}""
-printf "\nForward reads will be truncated at position %d" $FTRUNC
-printf "\nReverse reads will be truncated at position %d" $RTRUNC
-printf "\nThe minimum merge length is %d" $MIN_LEN
-printf "\nThe maximum merge length is %d\n" $MAX_LEN
+#printf "\nForward reads will be truncated at position %d" $FTRUNC
+#printf "\nReverse reads will be truncated at position %d" $RTRUNC
+printf "\nMinimum merge length: %d" $MIN_LEN
+printf "\nMaximum merge length: %d" $MAX_LEN
+printf "\nMaximum expected errors (DADA2 forward): %0.2f" $MAXEE_F
+printf "\nMaximum expected errors (DADA2 reverse): %0.2f" $MAXEE_R
+
 
 # Create the output directory, if necessary
 if [ ! -d "$OUTDIR" ]; then
@@ -123,5 +132,7 @@ printf "\n######################################################################
 printf "\nRunning the DADA2 pipeline...\n"
 printf "\n######################################################################\n"
 Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR/dada2 \
-	-f $FTRUNC -b $RTRUNC \
-	-s $MIN_LEN -l $MAX_LEN
+	-s $MIN_LEN -l $MAX_LEN \
+	-F $MAXEE_F -R $MAXEE_R
+#	-f $FTRUNC -b $RTRUNC 
+
