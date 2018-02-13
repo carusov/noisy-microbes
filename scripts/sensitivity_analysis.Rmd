@@ -1,0 +1,475 @@
+---
+title: "Merge and filter sensitivity analysis"
+author: "Vincent Caruso"
+date: "January 20, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Set up environment.
+```{r setup}
+
+library(tidyverse)
+library(stringr)
+library(Biostrings)
+library(dada2)
+
+scripts_path <- "~/thesis/noisy-microbes/scripts"
+data_path <- "~/thesis/data/sensitivity"
+raw_path <- file.path(data_path, "raw")
+trunc_path <- file.path(data_path, "truncated")
+merge_path <- file.path(data_path, "merged")
+derep_path <- file.path(data_path, "derep")
+report_path <- file.path(data_path, "reports")
+filt_path <- file.path(data_path, "filtered")
+
+if (!file_test("-d", derep_path)) dir.create(derep_path)
+
+```
+
+
+##Convenience functions
+
+Define some convenience functions for filtering, merging, and dereplicating.
+```{r helper functions}
+
+filter_usearch <- function(in_path, out_path, max_ee, max_n){
+  filter <- paste("-fastq_filter", in_path)
+  fastqout <- paste("-fastqout", out_path)
+  maxee <- paste("-fastq_maxee", max_ee)
+  maxns <- paste("-fastq_maxns", max_n)
+
+  filter_args <- c(filter, fastqout, maxee, maxns)
+  system2(command = "usearch", args = filter_args)
+}
+
+merge_usearch <- function(forward_in_path, out_path, max_diffs, min_merge_len, max_merge_len, report_path){
+  mergepairs <- paste("-fastq_mergepairs", forward_in_path)
+  fastqout <- paste("-fastqout", out_path)
+  relabel <- paste("-relabel", "@")
+  maxdiffs <- paste("-fastq_maxdiffs", max_diffs)
+  # pctid <- "-fastq_pctid 90"
+  minmergelen <- paste("-fastq_minmergelen", min_merge_len)
+  maxmergelen <- paste("-fastq_maxmergelen", max_merge_len)
+  report <- paste("-report", file.path(report_path, paste0("pooled_merge_", max_diffs, "_report.txt")))
+  
+  mergepair_args <- c(mergepairs, fastqout, relabel, maxdiffs, minmergelen, maxmergelen, report)
+  system2(command = "usearch", args = mergepair_args)
+}
+
+derep_usearch <- function(in_path, out_path){
+  uniques <- paste("-fastx_uniques", in_path)
+  fastaout <- paste("-fastaout", out_path)
+  
+  uniques_args <- c(uniques, fastaout, "-sizeout")
+  system2(command = "usearch", args = uniques_args)
+
+}
+
+count_lines <- function(in_path){
+  wc_args <- c("-l", in_path)
+  count <- system2(command = "wc", args = wc_args, stdout = TRUE)
+  return(count)
+}
+
+get_derep_stats <- function(in_path){
+  dereps <- readDNAStringSet(in_path)
+  count <- length(dereps)
+  sizes <- sapply(str_split(names(dereps), ";"), `[`, 2)
+  sizes <- sapply(str_split(sizes, "="), `[`, 2) %>% as.integer()
+  return(list(count = count, sizes = sizes))
+}
+
+```
+
+##Trim reads
+
+First truncate all reads: trim first 15 nt and low quality tails. Also remove any reads mapping to the phiX genome.
+```{r truncate}
+
+# args <- c(file.path(scripts_path, "fastq_truncate.R"), "-d", data_path, "-f", "230", "-b", "210")
+# system2(command = "Rscript", args = args)
+
+file.remove(file.path(trunc_path, list.files(trunc_path)))
+
+fastqs <- list.files(raw_path)
+fastqs <- str_subset(fastqs, ".fastq$")
+fastq_Fs <- str_subset(fastqs, "_R1")
+fastq_Rs <- str_subset(fastqs, "_R2")
+
+sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
+trunc_Fs <- paste0(sample_names, "_trunc_R1.fastq")
+trunc_Rs <- paste0(sample_names, "_trunc_R2.fastq")
+
+for (i in seq_along(fastq_Fs)){
+  fastqPairedFilter(file.path(raw_path, c(fastq_Fs[i], fastq_Rs[i])), 
+                    file.path(trunc_path, c(trunc_Fs[i], trunc_Rs[i])),
+                    truncLen = c(230, 210), trimLeft = c(15, 15),
+                    maxN = Inf, maxEE = c(Inf, Inf), truncQ = 2, rm.phix = TRUE,
+                    compress = FALSE, verbose = TRUE)
+}
+
+# filterAndTrim(fwd = file.path(raw_path, fastq_Fs), rev = file.path(raw_path, fastq_Rs), 
+#               filt = file.path(trunc_path, trunc_Fs), filt.rev = file.path(trunc_path, trunc_Rs),
+#               truncLen = c(230, 210), trimLeft = c(15, 15),
+#               maxN = 0, maxEE = Inf, truncQ = 2, rm.phix = TRUE, 
+#               compress = FALSE, verbose = TRUE, multithread = TRUE)
+  
+# get number of raw reads
+raw_count <- readDNAStringSet(file.path(trunc_path, trunc_Fs), format = "fastq")
+raw_count <- length(raw_count)
+
+```
+
+
+##Merge sensitiviy
+
+Now merge reads with a range of values for the -fastq_maxdiffs parameter.
+```{r merge}
+
+max_diffs <- seq(2, 30, 2)
+min_merge_len <- 220
+max_merge_len <- 225
+
+merge_stats <- tibble(raw_reads = integer(),
+                          max_diffs = integer(),
+                          merged_reads = integer(),
+                          prop_merged = numeric(),
+                          derep_reads = integer(),
+                          derep_sizes = list())
+
+file.remove(file.path(report_path, list.files(report_path)))
+
+for (val in max_diffs){
+  # merge reads
+  # mergepairs <- paste("-fastq_mergepairs", file.path(trunc_path, "*R1.fastq"))
+  # merged_file <- file.path(merge_path, "pooled_merged.fastq")
+  # fastqout <- paste("-fastqout", merged_file)
+  # relabel <- paste("-relabel", "@")
+  # maxdiffs <- paste("-fastq_maxdiffs", val)
+  # pctid <- "-fastq_pctid 80"
+  # minmergelen <- paste("-fastq_minmergelen", min_merge_len)
+  # maxmergelen <- paste("-fastq_maxmergelen", max_merge_len)
+  # report <- paste("-report", file.path(data_path, "reports", paste0("pooled_merge_", val, "_report.txt")))
+  # 
+  # mergepair_args <- c(mergepairs, fastqout, relabel, maxdiffs, pctid, minmergelen, maxmergelen, report)
+  # system2(command = "usearch", args = mergepair_args)
+  trunc_files <- file.path(trunc_path, "*R1.fastq")
+  merged_file <- file.path(merge_path, "pooled_merged.fastq")
+  merge_usearch(trunc_files, merged_file, val, min_merge_len, max_merge_len, report_path)
+
+  # get number of merged read pairs
+  # wc_args <- c("-l", merged_file)
+  # merge_count <- system2(command = "wc", args = wc_args, stdout = TRUE)
+  merge_count <- count_lines(merged_file)
+  merge_count <- str_split(merge_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+
+  # dereplicate reads
+  # uniques <- paste("-fastx_uniques", merged_file)
+  # derep_file <- file.path(derep_path, "pooled_derep.fasta")
+  # fastaout <- paste("-fastaout", derep_file)
+  # 
+  # uniques_args <- c(uniques, fastaout, "-sizeout")
+  # system2(command = "usearch", args = uniques_args)
+  derep_file <- file.path(derep_path, "pooled_derep.fasta")
+  derep_usearch(merged_file, derep_file)
+  
+  # get stats for unique reads
+  # dereps <- readDNAStringSet(derep_file)
+  # derep_count <- length(readDNAStringSet(derep_file))
+  # sizes <- sapply(str_split(names(dereps), ";"), `[`, 2)
+  # sizes <- sapply(str_split(sizes, "="), `[`, 2) %>% as.integer()
+  derep <- get_derep_stats(derep_file)
+
+  new_row <- tibble(raw_reads = raw_count,
+                    max_diffs = val,
+                    merged_reads = merge_count,
+                    prop_merged = merge_count / raw_count,
+                    derep_reads = derep$count,
+                    derep_sizes = list(derep$sizes))
+  
+  merge_stats <- rbind(merge_stats, new_row)
+}
+
+```
+
+
+##Filter sensitivity
+
+Now filter reads with a range of values for the -fastq_maxee parameter.
+```{r filter}
+
+max_ee <- seq(0.5, 4.0, 0.5)
+filter_stats <- tibble(raw_reads = integer(),
+                     max_ee = numeric(),
+                     filt_reads = integer(),
+                     prop_filtered = numeric(),
+                     derep_F_reads = integer(),
+                     derep_R_reads = integer(),
+                     derep_F_sizes = list(),
+                     derep_R_sizes = list())
+
+# pool forward reads and reverse reads prior to filtering
+arg1 = file.path(trunc_path, "*R1.fastq")
+arg2 = c(">", file.path(trunc_path, "pooled_trunc_R1.fastq"))
+system2(command = "cat", args = c(arg1, arg2))
+arg1 = file.path(trunc_path, "*R2.fastq")
+arg2 = c(">", file.path(trunc_path, "pooled_trunc_R2.fastq"))
+system2(command = "cat", args = c(arg1, arg2))
+
+for (val in max_ee){
+  # filter reads
+  filt_files <- file.path(filt_path, c("pooled_filtered_R1.fastq", "pooled_filtered_R2.fastq"))
+  fastqPairedFilter(file.path(trunc_path, c("pooled_trunc_R1.fastq", "pooled_trunc_R2.fastq")), 
+                    filt_files,
+                    maxN = 0, maxEE = val, rm.phix = FALSE,
+                    compress = FALSE, verbose = TRUE)
+  
+  # get number of filtered read pairs
+  # wc_args <- c("-l", filt_files[1])
+  # filt_count <- system2(command = "wc", args = wc_args, stdout = TRUE)
+  filt_count <- count_lines(filt_files[1])
+  filt_count <- str_split(filt_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+  # merge_counts <- c(merge_counts, count)
+  
+  # dereplicate reads
+  derep_files <- file.path(derep_path, c("pooled_derep_R1.fasta", "pooled_derep_R2.fasta"))
+  mapply(function(ff, df){
+    # uniques <- paste("-fastx_uniques", ff)
+    # # derep_file <- file.path(derep_path, paste0("pooled_derep_R", i, ".fasta"))
+    # fastaout <- paste("-fastaout", df)
+    # uniques_args <- c(uniques, fastaout, "-sizeout")
+    # system2(command = "usearch", args = uniques_args)
+    derep_usearch(ff, df)
+  }, filt_files, derep_files)
+  
+  # for (i in seq_along(filt_files)){
+  #   uniques <- paste("-fastx_uniques", filt_files[i])
+  #   derep_file <- file.path(derep_path, paste0("pooled_derep_R", i, ".fasta"))
+  #   fastaout <- paste("-fastaout", derep_file)
+  #   uniques_args <- c(uniques, fastaout, "-sizeout")
+  #   system2(command = "usearch", args = uniques_args)
+  # }
+    
+  # get stats for unique reads
+  # dereps <- lapply(derep_files, readDNAStringSet)
+  # derep_counts <- sapply(dereps, length)
+  # sizes <- lapply(dereps, function(d) sapply(str_split(names(d), ";"), `[`, 2))
+  # sizes <- lapply(sizes, function(s) sapply(str_split(s, "="), `[`, 2) %>% as.integer())
+  dereps <- lapply(derep_files, get_derep_stats)
+
+  new_row <- tibble(raw_reads = raw_count,
+                    max_ee = val,
+                    filt_reads = filt_count,
+                    prop_filtered = filt_count / raw_count,
+                    derep_F_reads = dereps[[1]]$count,
+                    derep_R_reads = dereps[[2]]$count,
+                    derep_F_sizes = list(dereps[[1]]$sizes),
+                    derep_R_sizes = list(dereps[[2]]$sizes))
+  
+  filter_stats <- rbind(filter_stats, new_row)
+}
+
+```
+
+
+Plot the results.
+```{r one-stage plots}
+
+library(ggpubr)
+
+reads_vs_diffs <- ggplot(data = merge_stats, aes(x = max_diffs, y = prop_merged)) +
+  geom_line() +
+  labs(title = "Proportion of reads merged vs. maximum number of differences between forward and reverse reads",
+       subtitle = "", x = "max # of differences", y = "proportion merged") 
+reads_vs_diffs
+
+dereps_vs_diffs <- ggplot(data = merge_stats, aes(x = max_diffs, y = derep_reads)) +
+  geom_line() +
+  labs(title = "Number of unique merged sequences vs. maximum number of differences between forward and reverse reads",
+       subtitle = "", x = "max # of differences", y = "unique sequences") 
+dereps_vs_diffs
+
+reads_vs_ee <- ggplot(data = filter_stats, aes(x = max_ee, y = prop_filtered)) +
+  geom_line() +
+  labs(title = "Proportion of reads filtered vs. maximum number of expected errors",
+       subtitle = "", x = "max expected errors", y = "proportion filtered") 
+reads_vs_ee
+
+dereps_vs_ee <- ggplot(data = filter_stats, aes(x = max_ee)) +
+  geom_line(aes(y = derep_F_reads), color = "blue") +
+  geom_line(aes(y = derep_R_reads), color = "green") +
+  labs(title = "Number of unique filtered sequences vs. maximum number of expected errors",
+       subtitle = "", x = "max expected errors", y = "unique sequences") 
+dereps_vs_ee
+
+ggarrange(reads_vs_diffs, reads_vs_ee, dereps_vs_diffs, dereps_vs_ee,
+          ncol = 2, nrow = 2)
+
+```
+
+
+##Merge-then-filter sensitivity
+
+First merge reads with a single value for -fastq_maxdiffs, then filter the merged set using a range of values for -fastq_maxee.
+```{r merge-then-filter}
+
+MAX_DIFFS <- 10
+max_ee <- seq(0.5, 4.0, 0.5)
+max_n <- 0
+merge_filter_stats2 <- tibble(raw_reads = integer(),
+                             max_diffs = integer(),
+                             max_ee = numeric(),
+                             filt_reads = integer(),
+                             prop_filt = numeric(),
+                             prop_merged_filt = numeric(),
+                             derep_reads = integer(),
+                             derep_sizes = list())
+
+file.remove(file.path(trunc_path, list.files(file.path(trunc_path), "^pooled_trunc.*")))
+trunc_files <- file.path(trunc_path, "*R1.fastq")
+merged_file <- file.path(merge_path, "pooled_merged.fastq")
+merge_usearch(trunc_files, merged_file, MAX_DIFFS, min_merge_len, max_merge_len, report_path)
+
+merge_count <- count_lines(merged_file)
+merge_count <- str_split(merge_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+
+for (val in max_ee){
+  # filter reads
+  filt_file <- file.path(filt_path, "pooled_filtered.fastq")
+  filter_usearch(merged_file, filt_file, val, max_n)
+
+    
+  # get number of filtered read pairs
+  filt_count <- count_lines(filt_file)
+  filt_count <- str_split(filt_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+
+  # dereplicate reads
+  derep_file <- file.path(derep_path, "pooled_derep_R1.fasta")
+  derep_usearch(filt_file, derep_file)
+    
+  # get stats for unique reads
+  derep <- get_derep_stats(derep_file)
+
+  new_row <- tibble(raw_reads = raw_count,
+                    max_diffs = max_diffs,
+                    max_ee = val,
+                    filt_reads = filt_count,
+                    prop_filt = filt_count / merge_count,
+                    prop_merged_filt = filt_count / raw_count,
+                    derep_reads = derep$count,
+                    derep_sizes = list(derep$sizes))
+  
+  merge_filter_stats2 <- rbind(merge_filter_stats2, new_row)
+}
+
+```
+
+
+##Filter-then-merge sensitivity
+
+
+```{r filter-then-merge}
+
+MAX_EE = 2.0
+max_diffs <- seq(2, 30, 2)
+min_merge_len <- 220
+max_merge_len <- 225
+
+filter_merge_stats <- tibble(raw_reads = integer(),
+                          max_diffs = integer(),
+                          merged_reads = integer(),
+                          prop_merged = numeric(),
+                          derep_reads = integer(),
+                          derep_sizes = list())
+
+file.remove(file.path(report_path, list.files(report_path)))
+
+# pool forward reads and reverse reads prior to filtering
+arg1 = file.path(trunc_path, "*R1.fastq")
+arg2 = c(">", file.path(trunc_path, "pooled_trunc_R1.fastq"))
+system2(command = "cat", args = c(arg1, arg2))
+arg1 = file.path(trunc_path, "*R2.fastq")
+arg2 = c(">", file.path(trunc_path, "pooled_trunc_R2.fastq"))
+system2(command = "cat", args = c(arg1, arg2))
+
+# filter reads
+trunc_files = file.path(trunc_path, c("pooled_trunc_R1.fastq", "pooled_trunc_R2.fastq"))
+filt_files <- file.path(filt_path, c("pooled_filtered_R1.fastq", "pooled_filtered_R2.fastq"))
+fastqPairedFilter(trunc_files, 
+                  filt_files,
+                  maxN = 0, maxEE = MAX_EE, rm.phix = FALSE,
+                  compress = FALSE, verbose = TRUE)
+
+filt_count <- count_lines(filt_files[1])
+filt_count <- str_split(filt_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+
+for (val in max_diffs){
+  # merge reads
+  merged_file <- file.path(merge_path, "pooled_merged.fastq")
+  merge_usearch(filt_files[1], merged_file, val, min_merge_len, max_merge_len, report_path)
+
+  # get number of merged read pairs
+  merge_count <- count_lines(merged_file)
+  merge_count <- str_split(merge_count, "\\s+")[[1]][1] %>% as.integer(.) / 4
+
+  # dereplicate reads
+  derep_file <- file.path(derep_path, "pooled_derep.fasta")
+  derep_usearch(merged_file, derep_file)
+  
+  # get stats for unique reads
+  derep <- get_derep_stats(derep_file)
+
+  new_row <- tibble(raw_reads = raw_count,
+                    max_ee = max_ee,
+                    max_diffs = val,
+                    merged_reads = merge_count,
+                    prop_merged = merge_count / filt_count,
+                    prop_filt_merged = merge_count / raw_count,
+                    derep_reads = derep$count,
+                    derep_sizes = list(derep$sizes))
+  
+  filter_merge_stats <- rbind(filter_merge_stats, new_row)
+}
+
+
+```
+
+
+Plot the results.
+```{r two-stage plots}
+
+library(ggpubr)
+
+merge_filt_prop <- ggplot(data = merge_filter_stats, aes(x = max_ee)) +
+  geom_line(aes(y = prop_filt), color = "blue") +
+  geom_line(aes(y = prop_merged_filt), color = "green") +
+  labs(title = "Merge-then-filter sensitivity to max EE",
+       subtitle = paste("Merged with max_diffs =", MAX_DIFFS), y = "proportion filtered") 
+merge_filt_prop
+
+merge_filt_dereps <- ggplot(data = merge_filter_stats, aes(x = max_ee)) +
+  geom_line(aes(y = derep_reads), color = "orange") +
+  labs(x = "max expected errors", y = "unique sequences") 
+merge_filt_dereps
+
+filt_merge_prop <- ggplot(data = filter_merge_stats, aes(x = max_diffs)) +
+  geom_line(aes(y  = prop_merged), color = "blue") +
+  geom_line(aes(y  = prop_filt_merged), color = "green") +
+  labs(title = "Filter-then-merge sensitivity to max mismatches", 
+       subtitle = paste("Filtered with max_ee =", MAX_EE), y = "proportion merged") 
+filt_merge_prop
+
+filt_merge_dereps <- ggplot(data = filter_merge_stats, aes(x = max_diffs)) +
+  geom_line(aes(y = derep_reads), color = "orange") +
+  labs(x = "max mismatches", y = "unique sequences") 
+filt_merge_dereps
+
+ggarrange(merge_filt_prop, filt_merge_prop, merge_filt_dereps, filt_merge_dereps,
+          ncol = 2, nrow = 2)
+
+```
