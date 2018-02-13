@@ -48,4 +48,5 @@ fi
 blastn -query "$INFILE" -db nt -out "$OUTFILE" \
        -task megablast -max_target_seqs 10 \
        -outfmt "7 qseqid qlen sseqid slen sskingdoms ssciname pident length nident mismatch gapopen gaps qstart qend sstart send evalue bitscore" \
-       -remote
+       -num_threads 4
+#       -remote
