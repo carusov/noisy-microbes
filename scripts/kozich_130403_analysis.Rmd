@@ -22,6 +22,10 @@ options(tibble.print_min = 100, tibble.print_max = 40)
 result_path <- "~/thesis/results/kozich_130403"
 ref_path <- "~/thesis/references"
 analysis_path <- "~/thesis/analysis/kozich_130403"
+script_path <- "~/thesis/noisy-microbes/scripts"
+plot_path <- "~/thesis/analysis/plots"
+
+source(file.path(script_path, "seq_table_processing.R"))
 
 if (!file_test("-d", analysis_path)) dir.create(analysis_path)
 
@@ -36,26 +40,17 @@ Load and inspect the tables from each clustering method. Modify tables as necess
 3. There are no comment lines (just a header with column names)
 
 After modifying the format of each table, write it back to a tab-separated '.txt' file.
+After modifying the format of each table, write it back to a tab-separated '.txt' file.
 ```{r load UCLUST}
 
 # load UCLUST table
-uclust_table <- as.tibble(read.table(file = file.path(result_path, "uclust/otu_table.txt"), header = TRUE, sep = "\t", 
-                                     skip = 1, comment.char = ""))
-colnames(uclust_table)[1] <- "id"
-uclust_table$id <- str_replace(uclust_table$id, "denovo", "denovo_")
-sample_name <- colnames(uclust_table)[-1]
-uclust_table <- uclust_table %>% select(id, sample_name)
-uclust_table <- uclust_table[apply(uclust_table[, sample_name], 1, max) > 1, ]  # remove singletons
+uclust_otu_file <- file.path(result_path, "uclust/otu_table.txt")
+uclust_seq_file <- file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta")
+uclust_table <- load_uclust(uclust_otu_file, uclust_seq_file)
+sample_names <- colnames(uclust_table)[c(-1, -length(colnames(uclust_table)))]
+uclust_table <- remove_rare(uclust_table, sample_names, min_abund = 2)  # remove singletons from all samples
 uclust_table
-write_tsv(uclust_table, file.path(result_path, "uclust/uclust_table.txt"))
-
-# load UCLUST representative sequences
-uclust_seqs <- readDNAStringSet(file.path(result_path, "uclust/rep_set/pooled_nochim_rep_set.fasta"))
-uclust_seqs <- as.character(uclust_seqs)
-names(uclust_seqs) <- sapply(str_split(names(uclust_seqs), " "), `[`, 1)
-names(uclust_seqs) <- str_replace(names(uclust_seqs), "denovo", "denovo_")
-uclust_table$sequence <- uclust_seqs[uclust_table$id]  # add sequences to table
-uclust_seqs <- uclust_seqs[uclust_table$id]
+write_tsv(uclust_table %>% select(-sequence), file.path(result_path, "uclust/uclust_table.txt"))
 
 ```
 
@@ -63,21 +58,12 @@ uclust_seqs <- uclust_seqs[uclust_table$id]
 ```{r load UPARSE}
 
 # load UPARSE table
-uparse_table <- as.tibble(read.table(file = file.path(result_path, "uparse/otu_table.txt"), header = TRUE, sep = "\t", 
-                                     comment.char = ""))
-colnames(uparse_table)[1] <- "id"
-uparse_table$id <- str_replace(uparse_table$id, "OTU", "OTU_")
-colnames(uparse_table)[-1] <- sample_name
-uparse_table <- uparse_table[apply(uparse_table[, sample_name], 1, max) > 1, ]  # remove singletons
+uparse_otu_file <- file.path(result_path, "uparse/otu_table.txt")
+uparse_seq_file <- file.path(result_path, "uparse/otus.fa")
+uparse_table <- load_uparse(uparse_otu_file, uparse_seq_file, sample_names = sample_names)
+uparse_table <- remove_rare(uparse_table, sample_names, min_abund = 2)  # remove singletons
 uparse_table
-write_tsv(uparse_table, file.path(result_path, "uparse/uparse_table.txt"))
-
-# load UPARSE representative sequences
-uparse_seqs <- readDNAStringSet(file.path(result_path, "uparse/otus.fa"))
-uparse_seqs <- as.character(uparse_seqs)
-names(uparse_seqs) <- str_replace(names(uparse_seqs), "OTU", "OTU_")
-uparse_table$sequence <- uparse_seqs[uparse_table$id]  # add sequences to table
-uparse_seqs <- uparse_seqs[uparse_table$id]
+write_tsv(uparse_table %>% select(-sequence), file.path(result_path, "uparse/uparse_table.txt"))
 
 ```
 
@@ -85,21 +71,12 @@ uparse_seqs <- uparse_seqs[uparse_table$id]
 ```{r load UNOISE}
 
 # load UNOISE table
-unoise_table <- as.tibble(read.table(file = file.path(result_path, "unoise/zotu_table.txt"), header = TRUE, sep = "\t", 
-                                     comment.char = ""))
-colnames(unoise_table)[1] <- "id"
-unoise_table$id <- str_replace(unoise_table$id, "OTU", "ZOTU_")
-colnames(unoise_table)[-1] <- sample_name
-unoise_table <- unoise_table[apply(unoise_table[, sample_name], 1, max) > 1, ]  # remove singletons
+unoise_otu_file <- file.path(result_path, "unoise/zotu_table.txt")
+unoise_seq_file <- file.path(result_path, "unoise/zotus.fa")
+unoise_table <- load_unoise(unoise_otu_file, unoise_seq_file, sample_names = sample_names)
+unoise_table <- remove_rare(unoise_table, sample_names, min_abund = 2)  # remove singletons
 unoise_table
-write_tsv(unoise_table, file.path(result_path, "unoise/unoise_table.txt"))
-
-# load UNOISE sequences
-unoise_seqs <- readDNAStringSet(file.path(result_path, "unoise/zotus.fa"))
-unoise_seqs <- as.character(unoise_seqs)
-names(unoise_seqs) <- sapply(names(unoise_seqs), FUN = str_replace, "OTU", "ZOTU_")
-unoise_table$sequence <- unoise_seqs[unoise_table$id]  # add sequences to table
-unoise_seqs <- unoise_seqs[unoise_table$id]
+write_tsv(unoise_table %>% select(-sequence), file.path(result_path, "unoise/unoise_table.txt"))
 
 ```
 
@@ -107,42 +84,13 @@ unoise_seqs <- unoise_seqs[unoise_table$id]
 ```{r load MED}
 
 # load MED table
-med_table <- read.table(file = file.path(result_path, "med/MATRIX-COUNT.txt"), header = TRUE, sep = "\t")
-row.names(med_table) <- med_table[, 1]
-med_table <- med_table[, -1]  # remove sample name column
-med_table <- data.frame(t(med_table))   # samples as columns
-med_table <- as.tibble(rownames_to_column(med_table, var = "id"))
-med_table$id <- str_replace(med_table$id, "X", "Node_")
+med_otu_file <- file.path(result_path, "med/MATRIX-COUNT.txt")
+med_seq_file <- file.path(result_path, "med/NODE-REPRESENTATIVES.fasta")
+med_chimera_file <- file.path(result_path, "med/uchime/NODE-chimeras.fasta")
+med_table <- load_med(med_otu_file, med_seq_file, med_chimera_file)
+med_table <- remove_rare(med_table, sample_names, min_abund = 2)  # remove singletons
 med_table
-
-# load MED sequences
-med_seqs <- readDNAStringSet(file.path(result_path, "med/NODE-REPRESENTATIVES.fasta"))
-med_seqs <- as.character(med_seqs)
-med_seqs <- sapply(med_seqs, FUN = str_replace, "-+", "")
-names(med_seqs) <- paste0("Node_", sapply(str_split(names(med_seqs), "\\|"), FUN = `[`, 1))  # remove size annotation
-
-# remove chimeras from MED sequences
-# DADA2 method
-# med_seqtab <- t(med_table)
-# colnames(med_seqtab) <- med_seqs
-# med_seqtab.no_chim <- removeBimeraDenovo(med_seqtab)
-# med_table.no_bim <- med_table[med_seqs %in% colnames(med_seqtab.no_chim), ]
-
-# UCHIME method
-med_seqs.chimeras <- readDNAStringSet(file.path(result_path, "med/uchime/NODE-chimeras.fasta"))
-if (length(med_seqs.chimeras) > 0){
-  med_seqs.chimeras <- as.character(med_seqs.chimeras)
-  names(med_seqs.chimeras) <- paste0("Node_", sapply(str_split(names(med_seqs.chimeras), ";"), FUN = `[`, 1))
-  med_table <- med_table[!med_seqs %in% med_seqs.chimeras, ]
-  med_table
-  med_seqs <- med_seqs[!med_seqs %in% med_seqs.chimeras]
-}
-
-med_table <- med_table[apply(med_table[, sample_name], 1, max) > 1, ]  # remove singletons
-write_tsv(med_table, file.path(result_path, "med/med_table.txt"))
-
-med_table$sequence <- med_seqs[med_table$id]  # add sequences to table
-med_seqs <- med_seqs[med_table$id]
+write_tsv(med_table %>% select(-sequence), file.path(result_path, "med/med_table.txt"))
 
 ```
 
@@ -150,18 +98,11 @@ med_seqs <- med_seqs[med_table$id]
 ```{r load Deblur table}
 
 # load Deblur table
-deblur_table <- as.tibble(read.table(file = file.path(result_path, "deblur/all.txt"), header = TRUE, sep = "\t", 
-                                     skip = 1, comment.char = ""))
-colnames(deblur_table)[1] <- "sequence"
-deblur_seqs <- toupper(deblur_table$sequence)
-deblur_table$sequence <- toupper(deblur_table$sequence)
-names(deblur_seqs) <- paste0("sOTU_", 1:length(deblur_seqs))
-deblur_table$id <- names(deblur_seqs)
-deblur_table <- deblur_table %>% select(id, sample_name, sequence)
-deblur_table <- deblur_table[apply(deblur_table[, sample_name], 1, max) > 1, ]  # remove singletons
+deblur_otu_file <- file.path(result_path, "deblur/all.txt")
+deblur_table <- load_deblur(deblur_otu_file)
+deblur_table <- remove_rare(deblur_table, sample_names, min_abund = 2)  # remove singletons
 deblur_table
-write_tsv(deblur_table, file.path(result_path, "deblur/deblur_table.txt"))
-deblur_seqs <- deblur_seqs[deblur_table$id]
+write_tsv(deblur_table %>% select(-sequence), file.path(result_path, "deblur/deblur_table.txt"))
 
 ```
 
@@ -169,17 +110,11 @@ deblur_seqs <- deblur_seqs[deblur_table$id]
 ```{r load DADA2 table}
 
 # load DADA2 table
-dada2_table <- read.table(file = file.path(result_path, "dada2/sv_table.no_chim.txt"), header = TRUE, sep = "\t")
-colnames(dada2_table) <- sample_name
-dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "sequence"))
-dada2_seqs <- dada2_table$sequence
-names(dada2_seqs) <- paste0("ASV_", 1:length(dada2_seqs))
-dada2_table$id <- names(dada2_seqs)
-dada2_table <- dada2_table %>% select(id, sample_name, sequence)
-dada2_table <- dada2_table[apply(dada2_table[, sample_name], 1, max) > 1, ]  # remove singletons
-dada2_seqs <- dada2_seqs[dada2_table$id]
+dada2_otu_file <- file.path(result_path, "dada2/sv_table.no_chim.txt")
+dada2_table <- load_dada2(dada2_otu_file, sample_names = sample_names)
+dada2_table <- remove_rare(dada2_table, sample_names, min_abund = 2)  # remove singletons
 dada2_table
-write_tsv(dada2_table, file.path(result_path, "dada2/dada2_table.txt"))
+write_tsv(dada2_table %>% select(-sequence), file.path(result_path, "dada2/dada2_table.txt"))
 
 ```
 
@@ -190,138 +125,36 @@ Combine sequences from all methods into a single table.
 methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
 all_seqs <- unique(c(uclust_table$sequence, uparse_table$sequence, unoise_table$sequence, med_table$sequence, 
                      deblur_table$sequence, dada2_table$sequence))
-all_mat <- matrix(0, nrow = 6, ncol = length(all_seqs))
-row.names(all_mat) <- methods
-colnames(all_mat) <- all_seqs
+all_table <- matrix(0, nrow = length(methods), ncol = length(all_seqs))
+row.names(all_table) <- methods
+colnames(all_table) <- all_seqs
 
-all_mat["uclust", uclust_table$sequence] <- uclust_table[[sample_name]]
-all_mat["uparse", uparse_table$sequence] <- uparse_table[[sample_name]]
-all_mat["unoise", unoise_table$sequence] <- unoise_table[[sample_name]]
-all_mat["med", med_table$sequence] <- med_table[[sample_name]]
-all_mat["deblur", deblur_table$sequence] <- deblur_table[[sample_name]]
-all_mat["dada2", dada2_table$sequence] <- dada2_table[[sample_name]]
+all_table["uclust", uclust_table$sequence] <- uclust_table[[sample_names]]
+all_table["uparse", uparse_table$sequence] <- uparse_table[[sample_names]]
+all_table["unoise", unoise_table$sequence] <- unoise_table[[sample_names]]
+all_table["med", med_table$sequence] <- med_table[[sample_names]]
+all_table["deblur", deblur_table$sequence] <- deblur_table[[sample_names]]
+all_table["dada2", dada2_table$sequence] <- dada2_table[[sample_names]]
 
-all_mat <- collapseNoMismatch(all_mat)
-all_seqs <- colnames(all_mat)
-
-all_table <- data.frame(t(all_mat))
+all_table <- collapseNoMismatch(all_table)
+all_table <- data.frame(t(all_table))
 all_table <- rownames_to_column(all_table, var = "sequence") %>% as.tibble() %>% 
-  mutate(id = paste0("Seq", seq_along(all_seqs))) %>% select(id, methods, sequence)
-names(all_seqs) <- all_table$id
+  mutate(id = paste0("Seq_", 1:nrow(all_table))) %>% select(id, methods, sequence)
 
 ```
+
 
 Read in reference sequences, and compute Levenshtein ("Hamming") distances between all inferred sequences and all reference sequences.
 ```{r Levenshtein function}
 
 ref_fasta <- "kozich_HMP_MOCK.fasta"
 
-ref_seqs <- readDNAStringSet(file.path(ref_path, ref_fasta))
-ref_seqs <- as.character(ref_seqs)
+ref_seqs <- readDNAStringSet(file.path(ref_path, ref_fasta)) %>% as.character()
 strains <- lapply(str_split(names(ref_seqs), "\\."), `[`, 1:2) 
 strains <- sapply(strains, paste0, collapse = ".")
-#species <- lapply(str_split(names(ref_seqs), "_"), `[`, 1:2)
-#species <- sapply(species, paste, collapse = "_")
 
-# define a function to compute Levenshtein distances between two sequences
-levDist <- Vectorize(function(query, ref, ...) {
-  mmi <- dada2:::nweval(query, ref, ...)    # this gives matches, mismatches, and indels
-  ldist <- mmi[2] + mmi[3]
-  if (nchar(query) > sum(mmi)) {    # query not fully overlapped by reference
-    ldist <- nchar(query) - mmi[1]  # include non-overlapped nucleotides in distance
-  }
-  return(ldist)
-})
-
-```
-
-
-Compute distances of inferred sequences to the reference sequences for each method.
-```{r compute distances}
-
-all_to_ref <- outer(all_seqs, ref_seqs, levDist, band = -1)
-row.names(all_to_ref) <- all_table$id
-all_to_ref_strains <- t(aggregate(t(all_to_ref), list(strains), min))
-colnames(all_to_ref_strains) <- all_to_ref_strains[1, ]
-all_to_ref_strains <- all_to_ref_strains[-1, ]
-class(all_to_ref_strains) <- "integer"
-
-#test <- t(rowsum(1 * t(all_to_ref == 0), strains) > 0)
-
-```
-
-
-Write functions to count and identify sequences that differ by 1 (or more) necleotides from a more abundant reference sequence.
-```{r noisy functions}
-
-# function to generate a table of "noisy"" sequences: those that are very similar to the reference sequences
-countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
-  if (max(colSums(dist_mat == 0)) > 1) {
-    print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
-    print("This may result in inaccurate counts of noisy seuqences.")
-  }
-  
-  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
-    stop("The sequence table must only contain column vectors of type 'numeric' or 'integer'.")
-  }
-  
-  rmat <- matrix(0, nrow = ncol(seq_tab), ncol = (max_dist - min_dist) + 1, 
-                 dimnames = list(colnames(seq_tab), paste0(min_dist:max_dist, "_off")))
-  
-  for (n in min_dist:max_dist){
-    mins <- apply(dist_mat, 1, min)   
-    noisy_ind <- which(dist_mat == n, arr.ind = TRUE)
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
-    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
-    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
-    
-    if (length(noisy_ind) > 0){
-      ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)  # get nearest sequence that matches reference
-      noisy_ind <- cbind(noisy_ind, ref_row)
-      is_n_off <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
-                   (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref_row"], ]) ) * 1  # is abundance less than reference?
-      row.names(is_n_off) <- row.names(noisy_ind)
-      is_n_off <- aggregate(is_n_off, by = list(row.names(is_n_off)), FUN = max)
-      row.names(is_n_off) <- is_n_off$Group.1
-      is_n_off <- is_n_off[, -1]
-      rmat[, n] <- colSums(is_n_off)
-    }
-    else rmat[, n] <- integer(nrow(rmat))
-  }
-  rmat <- cbind(rmat, "ref_noisy" =  rowSums(rmat))
-  return(rmat)
-}
-
-# define a function that returns whether sequences of a sequence table are "noisy"
-isRefNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
-  if (max(colSums(dist_mat == 0)) > 1) {
-    print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
-    print("This may result in inaccurate counts of noisy seuqences.")
-  }
-  
-  if (sum(!sapply(seq_tab, class) %in% c("integer", "numeric")) > 0){
-    stop("The sequence table must only contain column vectors of type 'integer' or 'numeric'.")
-  }
-  
-  mins <- apply(dist_mat, 1, min)   # get minimum distance for each sequence
-  noisy_ind <- which(dist_mat >= min_dist & dist_mat <= max_dist, arr.ind = TRUE) 
-  if (length(noisy_ind) == 0){
-    return(rep(FALSE, nrow(dist_mat)))
-  } 
-  else {
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
-    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
-    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
-    ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)   # find the nearest sequence that matches the reference
-    noisy_ind <- cbind(noisy_ind, ref = ref_row)
-    is_noisy <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
-                    (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref"], ]) )   # is abundance less than reference?
-    is_noisy <- apply(is_noisy, 1, any)   # collapse to vector
-    noisy_ind <- noisy_ind[is_noisy, , drop = FALSE]    # remove any with abundance higher than reference
-    noisy <- 1:nrow(dist_mat) %in% noisy_ind[, "row"]  
-    return(noisy)
-  }
-}
+all_to_ref <- compute_dist_to_ref(all_table, ref_seqs)
+strains_to_ref <- collapse_group_dist(all_to_ref, strains)
 
 ```
 
@@ -329,10 +162,8 @@ isRefNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
 Annotate sequences in sequence tables as "reference" if they exactly match a reference sequence, or as "ref_noisy" if they are within a specified Levenshtein distance range from a reference sequence. 
 ```{r annotate noisy}
 
-all_table$dist_to_ref <- apply(all_to_ref, 1, min)
-all_table$reference <- all_table$dist_to_ref == 0
-all_table$ref_noisy <- isRefNoisy(all_table[, methods], all_to_ref, 1, 3)
-all_table$ref_like <- all_table$reference | all_table$ref_noisy
+max_dist <- 10
+all_table <- annotate_ref(all_table, all_to_ref, sample_names = methods, max_dist = max_dist)
 
 ```
 
@@ -340,8 +171,7 @@ all_table$ref_like <- all_table$reference | all_table$ref_noisy
 Next, write each method's inferred (singleton-free) sequences to a fasta file, for BLASTing against nt.
 ```{r write fastas}
 
-all_seqs <- DNAStringSet(all_seqs)
-writeFasta(all_seqs, file.path(analysis_path, "all_seqs.fasta"))
+write_fasta(all_table, file.path(analysis_path, "all_seqs.fasta"))
 
 # BLAST sequences against the 'nt' database using the following command:
 # blastn -query all_seqs.fasta -db nt -out all_blast.txt \
@@ -352,64 +182,13 @@ writeFasta(all_seqs, file.path(analysis_path, "all_seqs.fasta"))
 ```
 
 
-Read in the results of the BLAST searches.
+Read in the results of the BLAST searches, and use them to annotate sequences. Annotate sequences in sequence tables as "contaminant" if they exactly match a sequence in 'nt', or as "contam_noisy" if they are within a specified Levenshtein distance range from an 'nt' sequence. 
 ```{r load blast tables}
 
-all_blast <- as.tibble(read.table(file.path(analysis_path, "all_blast.txt"), sep = "\t", comment.char = "#",
-                                  col.names = c("seqID", "seq_len", "subjectID", "subject_len", "kingdom", "sci_name", 
-                                                "identity", "aln_len", "matches", "mismatches", "gapopens", "gaps", 
-                                                "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
+all_blast <- load_blast(file.path(analysis_path, "all_blast.txt"))
 
-```
-
-
-Define functions to identify blast hits that are exact matches and those that are one or more nucleotides off.
-```{r blast parsing functions}
-
-isBlastHit <- function(seq_tab, blast_tab){
-  # blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
-  #                                   col.names = c("seqID", "seq_len", "subjectID", "subject_len", "kingdom", "sci_name", 
-  #                                                 "identity", "aln_len", "matches", "mismatches", "gapopens", "gaps", 
-  #                                                 "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
-  perfect_hits <- blast_tab[ (blast_tab$identity == 100) & 
-                               (blast_tab$seq_len == blast_tab$aln_len), ]
-                            # (blast_tab$aln_len == nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)])), ]
-  return(seq_tab$id %in% perfect_hits$seqID)
-}
-
-
-isBlastNoisy <- function(seq_tab, blast_tab, min_off = 1, max_off = 3){
-  # blast_tab <- as.tibble(read.table(blast_file, sep = "\t", comment.char = "#",
-  #                                   col.names = c("seqID", "seq_len", "subjectID", "subject_len", "kingdom", "sci_name", 
-  #                                                 "identity", "aln_length", "matches", "mismatches", "gapopens", "gaps", 
-  #                                                 "qstart", "qend", "sstart", "send", "evalue", "bitscore")))
-  
-  # annotate blast table to facilitate computation of differences between query and subject (nt) sequences
-  # blast_tab$seq_len <- nchar(seq_tab$sequence[match(blast_tab$seqID, seq_tab$id)])  # get lengths of query sequences
-  blast_tab$lev_dist <- blast_tab$mismatches + blast_tab$gaps  # compute Levenshtein distances, not counting terminal gaps
-  blast_tab$cov_dist <- pmax(blast_tab$seq_len - blast_tab$aln_len, 0)  # compute number of terminal gaps, if any
-  blast_tab$tot_dist <- blast_tab$lev_dist + blast_tab$cov_dist  # sum the two to get the total distance between sequences
-  
-  noisies <- blast_tab[between(blast_tab$tot_dist, min_off, max_off), ]
-  is_noisy <- seq_tab$id %in% noisies$seqID
-  
-  hits <- isBlastHit(seq_tab, blast_tab)
-  is_noisy[hits] <- FALSE
-  
-  return(is_noisy)
-}
-
-```
-
-
-Annotate sequences in sequence tables as "reference" if they exactly match a sequence in 'nt', or as "contam_noisy" if they are within a specified Levenshtein distance range from an 'nt' sequence. 
-```{r annotate blast results}
-
-all_table$contaminant <- isBlastHit(all_table, all_blast) & !all_table$ref_like
-all_table$contam_noisy <- isBlastNoisy(all_table, all_blast, 1, 3) & !all_table$ref_like
-all_table$contam_like <- all_table$contaminant | all_table$contam_noisy
-all_table$other <- !all_table$ref_like & !all_table$contam_like
-all_table$consensus <- apply(all_table[, methods], 1, min) > 0
+all_table <- annotate_contam(all_table, all_blast, sample_names = methods)
+all_table <- all_table %>% select(-sequence, id, methods, everything())
 
 ```
 
@@ -417,35 +196,8 @@ all_table$consensus <- apply(all_table[, methods], 1, min) > 0
 Compute a table of summaries for each method.
 ```{r compute method summaries}
 
-# summarize counts of various classes
-exp_strains <- rep(length(unique(strains)), length(methods))
-method_total <- colSums(all_table[, methods] > 0)
-method_strains <- sapply(all_table[, methods], function(m) sum(colSums(all_to_ref_strains[m > 0,]) > 0))
-method_ref <- colSums(all_table[, methods] > 0 & all_table$reference)
-method_ref_noisy <- countNoisySeqs(all_table[, methods], all_to_ref, 1, 3)
-method_ref_like <- method_ref + method_ref_noisy[, "ref_noisy"]
-method_contam <- colSums(all_table[, methods] > 0 & all_table$contaminant)
-method_contam_noisy <- colSums(all_table[, methods] > 0 & all_table$contam_noisy)
-method_contam_like <- colSums(all_table[, methods] > 0 & all_table$contam_like)
-method_other <- colSums(all_table[, methods] > 0 & all_table$other)
-
-# summarize percentage of primary classes
-method_pct_ref <- 100 * colSums(all_table[all_table$reference, methods]) / colSums(all_table[, methods])
-method_pct_ref_noisy <- 100 * colSums(all_table[all_table$ref_noisy, methods]) / colSums(all_table[, methods])
-method_pct_contam <- 100 * colSums(all_table[all_table$contaminant, methods]) / colSums(all_table[, methods])
-method_pct_contam_noisy <- 100 * colSums(all_table[all_table$contam_noisy, methods]) / colSums(all_table[, methods])
-method_pct_other <- 100 * colSums(all_table[all_table$other, methods]) / colSums(all_table[, methods])
-
-summary_table <- data.frame(method = methods, exp_strains = exp_strains, total = method_total, 
-                            strains = method_strains,
-                            reference = method_ref, method_ref_noisy, ref_like = method_ref_like,
-                            contaminant = method_contam, contam_noisy = method_contam_noisy, 
-                            contam_like = method_contam_like, other = method_other, 
-                            pct_ref = method_pct_ref, pct_ref_noisy = method_pct_ref_noisy, 
-                            pct_contam = method_pct_contam, pct_contam_noisy = method_pct_contam_noisy,
-                            pct_other = method_pct_other,
-                            row.names = NULL, check.names = FALSE)
-
+summary_table <- summarize_seqs(all_table, all_to_ref, methods, strains, max_dist = max_dist)
+colnames(summary_table)[1] <- "method"
 write_tsv(summary_table, path = file.path(analysis_path, "kozich_mock1_summary_table.tsv"))
 
 ```
@@ -454,15 +206,13 @@ write_tsv(summary_table, path = file.path(analysis_path, "kozich_mock1_summary_t
 From the summary table, compute recall and precision for the sequences inferred by each method.
 ```{r method sequence summary stats}
 
-seq_stats <- summary_table %>% 
-  mutate(TP = reference,
-         FN = exp_strains - reference,
-         FP = ref_noisy + contaminant + contam_noisy + other) %>%
-  select(method, TP, FN, FP)
+seq_stats <- compute_pr_seqs(summary_table)
+seq_stats <- seq_stats %>% arrange(desc(precision))
+write_tsv(seq_stats, path = file.path(analysis_path, "kozich_mock1_seq_stats.tsv"))
 
-seq_stats <- seq_stats %>%
-  mutate(recall = 100 * TP / (TP + FN),
-         precision = 100 * TP / (TP + FP))
+read_stats <- compute_pr_reads(all_table, sample_names = methods, sample_colname = "method")
+read_stats <- read_stats %>% arrange(desc(recall))
+write_tsv(read_stats, path = file.path(analysis_path, "kozich_mock1_read_stats.tsv"))
 
 ```
 
@@ -470,40 +220,11 @@ seq_stats <- seq_stats %>%
 Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
 
-all_table_gg <- gather(all_table, "method", "count", one_of(methods))
-median_reads <- median(colSums(all_table[, methods]))
-all_table_gg <- all_table_gg %>% mutate(log10 = log10(count))
-all_table_gg <- all_table_gg %>% group_by(method) %>% mutate(norm = count / sum(count)) %>% ungroup()
-all_table_gg <- all_table_gg %>% select(id, method, count, everything()) %>% select(-sequence, sequence)
+all_table_gg <- gather_samples(all_table, sample_names = methods, sample_colname = "method")
+all_table_gg <- annotate_norms(all_table_gg, group = "method")
 
-```
-
-
-Now, compute the same statistics for the reads assigned to sequences in the various classes.
-```{r method read summary stats}
-
-# count the number of true positive, false negative, and false positive reads
-TP_read <- all_table_gg %>% group_by(method) %>% filter(reference | contaminant) %>% summarize(TP = sum(count))
-FN_read <- all_table_gg %>% group_by(method) %>% filter(ref_noisy | contam_noisy) %>% summarize(FN = sum(count))
-FP_read <- all_table_gg %>% group_by(method) %>% filter(other) %>% summarize(FP = sum(count))
-TP_ref_read <- all_table_gg %>% group_by(method) %>% filter(reference) %>% summarize(TP_ref = sum(count))
-FN_ref_read <- all_table_gg %>% group_by(method) %>% filter(ref_noisy) %>% summarize(FN_ref = sum(count))
-
-read_sums <- TP_read %>% inner_join(FN_read, by = "method") %>% 
-  inner_join(FP_read, by = "method") %>%
-  inner_join(TP_ref_read, by = "method") %>%
-  inner_join(FN_ref_read, by = "method")
-
-read_stats <- read_sums %>% mutate(recall = 100 * TP / (TP + FN),
-                                   precision = 100 * TP / (TP + FP),
-                                   recall_ref = 100 * TP_ref / (TP_ref + FN_ref),
-                                   precision_ref = 100 * TP_ref / (TP_ref + FP),
-                                   false_neg_rate = 100 * FN / (TP + FN),
-                                   false_disc_rate = 100 * FP / (TP + FP)) %>%
-  select(-TP, -FN, -FP, -TP_ref, -FN_ref) %>%
-  arrange(desc(recall))
-
-write_tsv(read_stats, path = file.path(analysis_path, "kozich_read_stats.tsv"))
+kozich_gg <- all_table_gg
+save(kozich_gg, file = file.path(plot_path, "kozich_gg.RData"))
 
 ```
 
@@ -534,8 +255,8 @@ Create plots to show relative strength of signal (reference hits) to noise (non-
 library(ggbeeswarm)
 
 # ref vs. non-ref boxplots, raw counts
-snr_box <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
-  geom_boxplot(aes(fill = factor(reference, levels = c(TRUE, FALSE)))) +
+snr_box <- ggplot(data = all_table_gg) +
+  geom_boxplot(aes(x = method, y = log10_count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Kozich 'Mock1' mock community", x = "method", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
@@ -544,8 +265,8 @@ snr_box <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
 snr_box
 
 # ref vs. non-ref violin plots, raw counts
-snr_violin <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
-  geom_violin(aes(fill = factor(reference, levels = c(T, F)))) +
+snr_violin <- ggplot(data = all_table_gg) +
+  geom_violin(aes(x = method, y = log10_count, fill = factor(reference, levels = c(T, F)))) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Kozich 'Mock1' mock community", x = "method", y = "log10(read counts)") +
   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
@@ -554,7 +275,7 @@ snr_violin <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
 snr_violin
 
 # ref vs. non-ref beeswarm plots, raw counts
-snr_bees <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
+snr_bees <- ggplot(data = all_table_gg, aes(x = method, y = log10_count)) +
   geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), dodge.width = 0.75) +
   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
           subtitle = "Kozich 'Mock1' mock community", x = "method", y = "log10(read counts)") +
@@ -563,12 +284,13 @@ snr_bees <- ggplot(data = all_table_gg, aes(x = method, y = log10)) +
         legend.justification = c(1, 0))
 snr_bees
 
+
 # average (mean(log10)) of ref vs. non-ref signal
 # mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
-#   geom_point(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) +
-#   geom_line(data = subset(sample_sn_gg, hit), aes(color = method, group = method)) + 
-#   geom_point(data = subset(sample_sn_gg, !hit), aes(color = method, group = method)) +
-#   geom_line(data = subset(sample_sn_gg, !hit), aes(color = method, group =method))
+#   geom_point(data = subset(sample_sn_gg, reference), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, reference), aes(color = method, group = method)) + 
+#   geom_point(data = subset(sample_sn_gg, !reference), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, !reference), aes(color = method, group =method))
 # mean_snr_line
 # 
 # mean_snr_line <- ggplot(sample_summary, aes(x = sample, y = mean_snr)) +
@@ -578,6 +300,7 @@ snr_bees
 # mean_snr_line
 
 ```
+
 
 Create plot to show sample composition, colored by reference vs. non-reference.
 ```{r composition plot}
@@ -624,7 +347,7 @@ Plot bar plots of relative abundance of reference sequences, facetted by sample.
 ```{r reference seq bar plots}
 
 ref_bars <- ggplot(data = all_table_gg %>% filter(reference)) +
-  geom_col(aes(x = id, y = norm, fill = id), width = 0.8) +
+  geom_col(aes(x = id, y = rel_count, fill = id), width = 0.8) +
   facet_wrap(~method) 
   # scale_fill_brewer(palette = "Dark2")
 ref_bars
@@ -639,7 +362,7 @@ ref_bars
 Plot distribution boxplots of non-hit read counts for "contaminant" sequences vs non-contaminant ("other") sequences.
 ```{r snr contaminant vs other}
 
-snr_box_contam <- ggplot(all_table_gg %>% filter(!ref_like), aes(x = method, y = log10)) +
+snr_box_contam <- ggplot(all_table_gg %>% filter(!ref_like), aes(x = method, y = log10_count)) +
   geom_boxplot(aes(fill = factor(contaminant, levels = c(TRUE, FALSE)))) +
   labs(title = "Distribution of log10(read counts) for non-hit contaminant and non-contaminant sequences",
           subtitle = "Kozich 'Mock1' sample processed with various methods", x = "sample dilution", y = "log10(read counts)") +
