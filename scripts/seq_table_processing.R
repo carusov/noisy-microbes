@@ -13,90 +13,80 @@ library(ShortRead)
 options(stringsAsFactors = FALSE)
 
 # function to load UCLUST OTU table
-load_uclust <- function(otu_file_path, seqs_file_path, sample_names = NULL, rm_singletons = TRUE, min_abund = 2){
+load_uclust <- function(otu_file_path, seq_file_path, sample_names = NULL){
   uclust_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        skip = 1, comment.char = ""))
   colnames(uclust_table)[1] <- "id"
-  uclust_table$id <- str_replace(uclust_table$id, "denovo", "denovo_")  # make ids more readable
   
   if (is.null(sample_names)){
     sample_names <- colnames(uclust_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
   }
-  uclust_table <- uclust_table %>% select(id, sample_names)
+  uclust_table <- uclust_table %>% select(id, sample_names)  # put columns in order of sample names
   
-  # if (rm_singletons){
-  #   uclust_table <- uclust_table[apply(uclust_table[, sample_names], 1, max) > 1, ]  # remove singletons
-  # }
-  uclust_table <- uclust_table[rowSums(uclust_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
-  
-  uclust_seqs <- readDNAStringSet(seqs_file_path)
+  # get sequences and add them to the table
+  uclust_seqs <- readDNAStringSet(seq_file_path)
   uclust_seqs <- as.character(uclust_seqs)
   names(uclust_seqs) <- sapply(str_split(names(uclust_seqs), " "), `[`, 1)  # remove annotation from names
-  names(uclust_seqs) <- str_replace(names(uclust_seqs), "denovo", "denovo_")  # modify names to match table ids
-  uclust_table$sequence <- uclust_seqs[uclust_table$id]  # add sequences to table
+  uclust_table$sequence <- uclust_seqs[uclust_table$id]  
+  uclust_table$id <- str_replace(uclust_table$id, "denovo", "denovo_")  # make ids more readable
   
   return(uclust_table)
 }
 
 
 # function to load UPARSE OTU table
-load_uparse <- function(otu_file_path, seqs_file_path, sample_names = NULL, rm_singletons = TRUE, min_abund = 2){
+load_uparse <- function(otu_file_path, seq_file_path, sample_names = NULL){
   uparse_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        comment.char = ""))
   colnames(uparse_table)[1] <- "id"
-  uparse_table$id <- str_replace(uparse_table$id, "OTU", "OTU_")
   
   if (is.null(sample_names)){
     sample_names <- colnames(uparse_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
-  } else colnames(uparse_table)[-1] <- sample_names
-  
-  if (rm_singletons){
-    uparse_table <- uparse_table[apply(uparse_table[, sample_names], 1, max) > 1, ]  # remove singletons
+  } else {
+    tmp_names <- colnames(uparse_table)[-1][order(colnames(uparse_table)[-1])]  
+    uparse_table <- uparse_table %>% select(id, tmp_names)  # put sample columns in order
+    colnames(uparse_table)[-1] <- sample_names  # rename columns with provided sample names
   }
   
-  uparse_table <- uparse_table[rowSums(uparse_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
-
-  uparse_seqs <- readDNAStringSet(seqs_file_path)
+  # get sequences and add them to the table
+  uparse_seqs <- readDNAStringSet(seq_file_path)
   uparse_seqs <- as.character(uparse_seqs)
-  names(uparse_seqs) <- str_replace(names(uparse_seqs), "OTU", "OTU_")
   uparse_table$sequence <- uparse_seqs[uparse_table$id]  # add sequences to table
+  uparse_table$id <- str_replace(uparse_table$id, "OTU", "OTU_")
   
   return(uparse_table)
 }
 
 
 # function to load UNOISE ZOTU table
-load_unoise <- function(otu_file_path, seqs_file_path, sample_names = NULL, rm_singletons = TRUE, min_abund = 2){
+load_unoise <- function(otu_file_path, seq_file_path, sample_names = NULL){
   unoise_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        comment.char = ""))
   colnames(unoise_table)[1] <- "id"
-  unoise_table$id <- str_replace(unoise_table$id, "OTU", "ZOTU_")
   
   if (is.null(sample_names)){
     sample_names <- colnames(unoise_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
-  } else colnames(unoise_table)[-1] <- sample_names
-  
-  if (rm_singletons){
-    unoise_table <- unoise_table[apply(unoise_table[, sample_names], 1, max) > 1, ]  # remove singletons
+  } else {
+    tmp_names <- colnames(unoise_table)[-1][order(colnames(unoise_table)[-1])]  
+    unoise_table <- unoise_table %>% select(id, tmp_names)  # put sample columns in order
+    colnames(unoise_table)[-1] <- sample_names
   }
   
-  unoise_table <- unoise_table[rowSums(unoise_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
-  
-  # load UNOISE sequences
-  unoise_seqs <- readDNAStringSet(seqs_file_path)
+  # get sequences and add them to the table
+  unoise_seqs <- readDNAStringSet(seq_file_path)
   unoise_seqs <- as.character(unoise_seqs)
-  names(unoise_seqs) <- sapply(names(unoise_seqs), FUN = str_replace, "OTU", "ZOTU_")
   unoise_table$sequence <- unoise_seqs[unoise_table$id]  # add sequences to table
+  unoise_table$id <- str_replace(unoise_table$id, "OTU", "ZOTU_")
   
   return(unoise_table)
 }
 
 
 # function to load MED Node table
-load_med <- function(otu_file_path, seqs_file_path, chimera_file_path, sample_names = NULL, rm_singletons = TRUE){
+load_med <- function(otu_file_path, seq_file_path, chimera_file_path, sample_names = NULL){
   med_table <- read.table(file = otu_file_path, header = TRUE, sep = "\t")
   row.names(med_table) <- med_table[, 1]
   med_table <- med_table[, -1]  # remove sample name column
@@ -107,59 +97,57 @@ load_med <- function(otu_file_path, seqs_file_path, chimera_file_path, sample_na
   if (is.null(sample_names)){
     sample_names <- colnames(med_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
-  } else colnames(med_table)[-1] <- sample_names
+  } else {
+    tmp_names <- colnames(med_table)[-1][order(colnames(med_table)[-1])]  
+    med_table <- med_table %>% select(id, tmp_names)  # put sample columns in order
+    colnames(med_table)[-1] <- sample_names
+  }
   
-  # load MED sequences
-  med_seqs <- readDNAStringSet(seqs_file_path)
+  # get sequences and add them to the table
+  med_seqs <- readDNAStringSet(seq_file_path)
   med_seqs <- as.character(med_seqs)
   med_seqs <- sapply(med_seqs, FUN = str_replace, "-+", "")
   names(med_seqs) <- paste0("Node_", sapply(str_split(names(med_seqs), "\\|"), FUN = `[`, 1))  # remove size annotation
+  med_table$sequence <- med_seqs[med_table$id]  # add chimera-free sequences to table
   
   # remove chimeras detected with UCHIME method
   med_seqs.chimeras <- readDNAStringSet(chimera_file_path)
   if (length(med_seqs.chimeras) > 0){
     med_seqs.chimeras <- as.character(med_seqs.chimeras)
     names(med_seqs.chimeras) <- paste0("Node_", sapply(str_split(names(med_seqs.chimeras), ";"), FUN = `[`, 1))
-    med_table <- med_table[!med_seqs %in% med_seqs.chimeras, ]
-    med_table
-    med_seqs <- med_seqs[!med_seqs %in% med_seqs.chimeras]
+    med_table <- med_table[!med_table$sequence %in% med_seqs.chimeras, ]
   }
-  
-  if (rm_singletons){
-    med_table <- med_table[apply(med_table[, sample_names], 1, max) > 1, ]  # remove singletons
-  }
-
-  med_table$sequence <- med_seqs[med_table$id]  # add sequences to table
   
   return(med_table)
 }
 
 
 # function to load Deblur sOTU table
-load_deblur <- function(otu_file_path, sample_names = NULL, rm_singletons = TRUE){
+load_deblur <- function(otu_file_path, sample_names = NULL){
   deblur_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        skip = 1, comment.char = ""))
   colnames(deblur_table)[1] <- "sequence"
-  deblur_table$sequence <- as.character(deblur_table$sequence)
-  deblur_table$id <- paste0("sOTU_", 1:nrow(deblur_table))
+  deblur_table$sequence <- toupper(deblur_table$sequence)
+  # deblur_table$sequence <- as.character(deblur_table$sequence)
   
   if (is.null(sample_names)){
-    sample_names <- colnames(deblur_table)[c(-1, -length(colnames(deblur_table)))]  
+    sample_names <- colnames(deblur_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
-  } else colnames(deblur_table)[c(-1, -length(colnames(deblur_table)))] <- sample_names
+  } else {
+    tmp_names <- colnames(deblur_table)[-1][order(colnames(deblur_table)[-1])]  
+    deblur_table <- deblur_table %>% select(sequence, tmp_names)  # put sample columns in order
+    colnames(deblur_table)[-1] <- sample_names
+  }  
   
+  deblur_table$id <- paste0("sOTU_", 1:nrow(deblur_table))
   deblur_table <- deblur_table %>% select(id, sample_names, sequence)
-  
-  if (rm_singletons){
-    deblur_table <- deblur_table[apply(deblur_table[, sample_names], 1, max) > 1, ]  # remove singletons
-  }
   
   return(deblur_table)  
 }
 
 
 # function to load DADA2 ASV table
-load_dada2 <- function(otu_file_path, sample_names = NULL, rm_singletons = TRUE, min_abund = 2){
+load_dada2 <- function(otu_file_path, sample_names = NULL){
   dada2_table <- read.table(file = otu_file_path, header = TRUE, sep = "\t")
   
   if (length(dada2_table) == 1){
@@ -169,22 +157,39 @@ load_dada2 <- function(otu_file_path, sample_names = NULL, rm_singletons = TRUE,
   }
   
   dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "sequence"))
-  dada2_table$id <- paste0("ASV_", 1:nrow(dada2_table))
   
   if (is.null(sample_names)){
-    sample_names <- colnames(dada2_table)[c(-1, -length(colnames(dada2_table)))]  
+    sample_names <- colnames(dada2_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
-  } else colnames(dada2_table)[c(-1, -length(colnames(dada2_table)))] <- sample_names
+  } else {
+    tmp_names <- colnames(dada2_table)[-1][order(colnames(dada2_table)[-1])]  
+    dada2_table <- dada2_table %>% select(sequence, tmp_names)  # put sample columns in order
+    colnames(dada2_table)[-1] <- sample_names
+  }  
   
+  dada2_table$id <- paste0("ASV_", 1:nrow(dada2_table))
   dada2_table <- dada2_table %>% select(id, sample_names, sequence)
   
-  if (rm_singletons){
-    dada2_table <- dada2_table[apply(dada2_table[, sample_names], 1, max) > 1, ]  # remove singletons
+  return(dada2_table)
+}
+
+
+# define a function to remove sequences below a minimum abundance across all samples
+filter_abund_across <- function(seq_table, sample_names, min_abund = 2){
+  seq_table <- seq_table[rowSums(seq_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
+  return(seq_table)
+}
+
+
+# define a function to remove low abundance sequences from any sample
+remove_rare <- function(seq_table, sample_names, min_abund = 2, discard_empty = TRUE){
+  seq_table[, sample_names][seq_table[, sample_names] < min_abund]  <- 0  # set rare abundances to zero
+  
+  if (discard_empty){
+    seq_table <- seq_table[rowSums(seq_table[, sample_names]) > 0, ]  # remove seqs with all zeros
   }
   
-  dada2_table <- dada2_table[rowSums(dada2_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
-  
-  return(dada2_table)
+  return(seq_table)
 }
 
 
@@ -355,13 +360,55 @@ annotate_contam <- function(seq_table, blast_table, sample_names, max_off = 3){
 }
 
 
+# function to add a class label column to an annotated sequence table
+annotate_class <- function(seq_table){
+  seq_table$label <- factor(rep("Other", nrow(seq_table)), levels = c("Reference", "Ref_Noisy", "Contaminant", "Contam_Noisy", "Other"))
+  seq_table$label[seq_table$reference] <- "Reference"
+  seq_table$label[seq_table$ref_noisy] <- "Ref_Noisy"
+  seq_table$label[seq_table$contaminant] <- "Contaminant"
+  seq_table$label[seq_table$contam_noisy] <- "Contam_Noisy"
+  return(seq_table)
+}
+
+
+# function to compute distances between sequences in the same table
+compute_inter_dist <- function(seq_tab, label1, label2){
+  label1_seqs <- seq_tab %>% filter(!!as.name(label1)) %>% .$sequence
+  names(label1_seqs) <- seq_tab %>% filter(!!as.name(label1)) %>% .$id
+  label2_seqs <- seq_tab %>% filter(!!as.name(label2)) %>% .$sequence
+  names(label2_seqs) <- seq_tab %>% filter(!!as.name(label2)) %>% .$id
+  label1_to_label2 <- outer(label1_seqs, label2_seqs, levDist, band = -1)
+  return(label1_to_label2)
+}
+
+
+# function to annotate sequence table with minimum inter-sequence distance, 
+# as computed above
+annotate_inter_dist <- function(seq_tab, inter_dist, column_name){
+  if (!column_name %in% colnames(seq_tab)){
+    seq_tab <- seq_tab %>% mutate(column_name = rep(NA, nrow(seq_tab)))
+  }
+  seq_tab[seq_tab$id %in% row.names(inter_dist), column_name] <- apply(inter_dist, 1, function(d) min(d[d > 0]))
+  return(seq_tab)
+}
+
+
+# function to count the number of strains' sequences that match inferred sequences
+count_strains <- function(seq_vector, strain_dist){
+  seqs_to_strains <- apply(strain_dist[seq_vector > 0, ], 2, min)
+  n_match <- sum(seqs_to_strains == 0)
+  return(n_match)
+}
+
+
 # function to create a summary table from a sequence table
 summarize_seqs <- function(seq_table, dist_mat, sample_names, strains, max_dist){
   # summarize counts of various classes
   exp_strains <- rep(length(unique(strains)), length(sample_names))
   total_count <- colSums(seq_table[, sample_names] > 0)
   strain_dist <- collapse_group_dist(dist_mat, strains)
-  strain_count <- sapply(seq_table[, sample_names], function(m) sum(colSums(strain_dist[m > 0,]) > 0))
+  strain_count <- sapply(seq_table[, sample_names], count_strains, strain_dist)
+  # strain_count <- sapply(seq_table[, sample_names], function(m) sum(colSums(strain_dist[m > 0,]) > 0))
   ref_count <- colSums(seq_table[, sample_names] > 0 & seq_table$reference)
   ref_noisy_count <- countNoisySeqs(seq_table[, sample_names], dist_mat, 1, max_dist)
   ref_like_count <- ref_count + ref_noisy_count[, "ref_noisy"]
@@ -400,11 +447,53 @@ sanity_check_summary <- function(sum_table){
 }
 
 
+# function to convert list of method summaries to list of sample summaries
+method_to_sample <- function(method_table_list, mt_colname, st_colname){
+  sample_names <- method_table_list[[1]][[mt_colname]]
+  sample_summary <- sapply(sample_names, function(m) NULL)
+  
+  sample_summary <- mapply(function(ssum, sname, msum){
+    ssum <- lapply(msum, function(ms, ss, sn) {
+      ss <- rbind(ss, ms[ms[[mt_colname]] == sn, ])
+      return(ss)
+    }, ss = ssum, sn = sname)
+    
+    ssum <- do.call("rbind", ssum) %>% rownames_to_column(var = st_colname)
+    ssum <- ssum %>% select(-one_of(mt_colname))
+    return(ssum)
+  }, ssum = sample_summary, sname = sample_names, MoreArgs = list(msum = method_table_list), 
+  SIMPLIFY = FALSE)
+ 
+  return(sample_summary) 
+}
+
+
+# function to write a list of tables to a single file
+write_tables <- function(table_list, file_path, overwrite = TRUE){
+  if (file.exists(file_path) & overwrite == FALSE){
+    cat("File", file_path, "exists, I will not overwrite it.\n")
+    return(FALSE)
+  } else if (file.exists(file_path) & overwrite == TRUE){
+    file.remove(file_path)
+  }
+  
+  header = paste(colnames(table_list[[1]]), collapse = "\t")
+  tab_names <- names(table_list)
+  for (i in seq_along(table_list)){
+    write(c("\n", tab_names[i]), file_path, append = TRUE)
+    write(header, file_path, append = TRUE)
+    write_tsv(table_list[[i]], file_path, append = TRUE)
+  }
+  
+  return(TRUE)
+}
+
+
 # function to compute precision and recall at the sequence level
 compute_pr_seqs <- function(sum_table){
   seq_stats <- sum_table %>% 
     mutate(TP = reference,
-           FN = exp_strains - reference,
+           FN = pmax(exp_strains - reference, 0),
            FP = ref_noisy + contaminant + contam_noisy + other) %>%
     select(1, TP, FN, FP)
   
@@ -414,6 +503,26 @@ compute_pr_seqs <- function(sum_table){
     as.tibble()
   
   return(seq_stats)
+}
+
+
+# function to compute precision and recall at the read level
+compute_pr_reads <- function(seq_tab, sample_names, sample_colname = "sample"){
+  # count the number of true positive, false negative, and false positive reads
+  TP <- seq_tab %>% filter(reference | contaminant) %>% select(sample_names) %>% colSums()
+  FN <- seq_tab %>% filter(ref_noisy | contam_noisy) %>% select(sample_names) %>% colSums()
+  FP <- seq_tab %>% filter(other) %>% select(sample_names) %>% colSums()
+  TP_ref <- seq_tab %>% filter(reference) %>% select(sample_names) %>% colSums()
+  FN_ref <- seq_tab %>% filter(ref_noisy) %>% select(sample_names) %>% colSums()
+  
+  read_stats <- tibble(sample = sample_names,
+                       recall = 100 * TP / (TP + FN),
+                       precision = 100 * TP / (TP + FP),
+                       recall_ref = 100 * TP_ref / (TP_ref + FN_ref),
+                       precision_ref = 100 * TP_ref / (TP_ref + FP))
+  colnames(read_stats)[1] <- sample_colname
+ 
+  return(read_stats)
 }
 
 
@@ -444,29 +553,22 @@ annotate_norms <- function(all_seq_table, group){
   return(all_seq_table)
 }
 
+###############################################################################
+#
+# Plotting functions
+#
+###############################################################################
 
-# function to compute precision and recall at the read level
-compute_pr_reads <- function(all_seq_tab_gg, group){
-  # count the number of true positive, false negative, and false positive reads
-  all_seq_tab_gg <- all_seq_tab_gg %>% group_by_at(group)
-  TP <- all_seq_tab_gg %>% filter(reference | contaminant) %>% summarize(TP = sum(count))
-  FN <- all_seq_tab_gg %>% filter(ref_noisy | contam_noisy) %>% summarize(FN = sum(count))
-  FP <- all_seq_tab_gg %>% filter(other) %>% summarize(FP = sum(count))
-  TP_ref <- all_seq_tab_gg %>% filter(reference) %>% summarize(TP_ref = sum(count))
-  FN_ref <- all_seq_tab_gg %>% filter(ref_noisy) %>% summarize(FN_ref = sum(count))
+# ref vs. non-ref beeswarm plots, log10 raw counts
+snr_beeswarm_plot <- function(gg_table, x_var, pt_scale, dodge, data_name, x_label, y_label,
+                              colors = c("blue", "orange"), title){
   
-  read_stats <- TP %>% inner_join(FN, by = group) %>% 
-    inner_join(FP, by = group) %>%
-    inner_join(TP_ref, by = group) %>%
-    inner_join(FN_ref, by = group)
-  
-  read_stats <- read_stats %>% mutate(recall = 100 * TP / (TP + FN),
-                                      precision = 100 * TP / (TP + FP),
-                                      recall_ref = 100 * TP_ref / (TP_ref + FN_ref),
-                                      precision_ref = 100 * TP_ref / (TP_ref + FP)) %>%
-                                      # false_neg_rate = 100 * FN / (TP + FN),
-                                      # false_disc_rate = 100 * FP / (TP + FP)) %>%
-    select(-TP, -FN, -FP, -TP_ref, -FN_ref)
-  
-  return(read_stats)
+  snr_bees <- ggplot(data = gg_table %>% filter(count > 0), aes_string(x = x_var, y = "log10_count")) +
+    geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), priority = "ascending", cex = pt_scale, dodge.width = dodge) +
+    labs(title = title, x = x_label, y = y_label) + #, subtitle = paste(data_name, "sample")) +
+    scale_color_manual(name = "Sequence class", labels = c("reference", "non-reference"), values = colors) +
+    theme(legend.position = "right",
+          legend.justification = c(1, 0))
+    
+  return(snr_bees)
 }
