@@ -52,7 +52,8 @@ deblur workflow --seqs-fp $INFILE \
        --output-dir $OUTDIR \
        -t $TRIM \
        --log-file $OUTDIR/deblur.log \
-       --overwrite
+       --overwrite \
+       --jobs-to-start 4
 #       --pos-ref-fp $REF_FILE
 
 # Convert the .biom files to .txt files
