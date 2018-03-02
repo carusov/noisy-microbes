@@ -186,6 +186,19 @@ all_blast <- load_blast(file.path(analysis_path, "all_blast.txt"))
 
 all_table <- annotate_contam(all_table, all_blast, sample_names = methods, max_off = max_dist)
 all_table <- all_table %>% select(-sequence, id, methods, everything())
+all_table <- annotate_class(all_table)
+
+```
+
+
+Compute distances between `contam_noisy` and `contaminant` sequences. This should give a sense of how many `contam_noisy` sequences may have been generated through sequencer errors from `contaminant` template sequences. Also, compute distances between `contaminant` sequences. This will give an idea of whether or not OTU methods underestimate the number of `contaminant` sequences by lumping them together, if they are within the 97% similarity threshold of each other.
+```{r contam_noisy distances}
+
+noisy_to_contam <- compute_inter_dist(all_table, "contam_noisy", "contaminant")
+contam_to_contam <- compute_inter_dist(all_table, "contaminant", "contaminant")
+
+all_table <- annotate_inter_dist(all_table, noisy_to_contam, dist_to_contam)
+all_table <- annotate_inter_dist(all_table, contam_to_contam, dist_to_contam)
 
 ```
 
@@ -193,7 +206,7 @@ all_table <- all_table %>% select(-sequence, id, methods, everything())
 Compute a table of summaries for each method.
 ```{r compute method summaries}
 
-summary_table2 <- summarize_seqs(all_table2, all_to_ref, methods, strains, max_dist = max_dist)
+summary_table <- summarize_seqs(all_table, all_to_ref, methods, strains, max_dist = max_dist)
 colnames(summary_table)[1] <- "method"
 write_tsv(summary_table, path = file.path(analysis_path, "zymo_neat_summary_table.tsv"))
 
