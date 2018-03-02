@@ -74,6 +74,9 @@ do
     shift
 done
 
+# Get full path in case relative path is given by user
+WDIR=$(readlink -f $WDIR)
+
 printf "\nWORKING DIRECTORY: %s" "$WDIR"
 printf "\n\nTRUNCATION parameters:"
 printf "\nForward read truncate position: %d" $FTRUNC
@@ -154,12 +157,18 @@ do
     bn=$(basename $fq _merged.fastq)
     nn=$bn"_filtered.fastq"
     usearch -fastq_filter $fq \
-	    -fastqout $WDIR/filtered/$nn \
+	    -fastqout $WDIR/filtered/$bn"_filtered.fastq" \
+	    -fastaout $WDIR/filtered/$bn"_filtered.fasta" \
 	    -fastq_maxee $MAXEE \
 	    -fastq_maxns $MAXNS
-    
+
+    # Generate filter report
     usearch -fastx_info $WDIR/filtered/$nn \
 	    -output $WDIR/reports/$bn"_filtered_info.txt"
+
+    # Reformat deflines to QIIME format
+    printf "\nReformatting read sequences to QIIME format...\n"
+    sed -i '/^>/ s/\./_/' $WDIR/filtered/$bn"_filtered.fasta" \
 
 #    rm $WDIR/filtered/$nn
 done
