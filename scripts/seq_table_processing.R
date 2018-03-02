@@ -385,8 +385,9 @@ compute_inter_dist <- function(seq_tab, label1, label2){
 # function to annotate sequence table with minimum inter-sequence distance, 
 # as computed above
 annotate_inter_dist <- function(seq_tab, inter_dist, column_name){
+  column_name <- quo_name(enquo(column_name))
   if (!column_name %in% colnames(seq_tab)){
-    seq_tab <- seq_tab %>% mutate(column_name = rep(NA, nrow(seq_tab)))
+    seq_tab <- seq_tab %>% mutate(!!column_name := rep(NA, nrow(seq_tab)))
   }
   seq_tab[seq_tab$id %in% row.names(inter_dist), column_name] <- apply(inter_dist, 1, function(d) min(d[d > 0]))
   return(seq_tab)
@@ -560,15 +561,61 @@ annotate_norms <- function(all_seq_table, group){
 ###############################################################################
 
 # ref vs. non-ref beeswarm plots, log10 raw counts
-snr_beeswarm_plot <- function(gg_table, x_var, pt_scale, dodge, data_name, x_label, y_label,
-                              colors = c("blue", "orange"), title){
+snr_beeswarm_plot <- function(gg_table, x_var, x_label, point_colors = c("blue", "orange"), title){
   
   snr_bees <- ggplot(data = gg_table %>% filter(count > 0), aes_string(x = x_var, y = "log10_count")) +
-    geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), priority = "ascending", cex = pt_scale, dodge.width = dodge) +
-    labs(title = title, x = x_label, y = y_label) + #, subtitle = paste(data_name, "sample")) +
-    scale_color_manual(name = "Sequence class", labels = c("reference", "non-reference"), values = colors) +
+    geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), size = 2.5, priority = "ascending", cex = 0.15, dodge.width = 0.5) +
+    labs(title = title, x = x_label, y = "log10(count)") +
+    scale_color_manual(name = "Sequence type", labels = c("Reference", "non-Reference"), values = point_colors) +
     theme(legend.position = "right",
-          legend.justification = c(1, 0))
+          legend.justification = c(1, 0.5), 
+          axis.title = element_text(face = "bold"))
     
   return(snr_bees)
+}
+
+
+# create dodged bar plot of sequence counts for a given label
+dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_labels, psub = NULL){
+  if (is.null(seq_label)){
+    gg_data <- gg_table %>% filter(count > 0)
+    ptitle <- "Total inferred sequences"
+  }
+  else {
+    gg_data <- gg_table %>% filter(label == seq_label, count > 0)
+    ptitle <- paste(seq_label, "sequences")
+  }
+  
+  seq_bars <- ggplot(gg_data, aes_string(x = x_axis)) +
+    geom_bar(aes(fill = factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"))), 
+             width = 0.8, position = position_dodge(preserve = "single")) +
+    # scale_fill_brewer(name = "Class", type = "qual", palette = 3) +
+    scale_fill_manual(name = "Method", values = bar_colors) +
+    scale_x_discrete(labels = x_labels) +
+    labs(title = ptitle, 
+         subtitle = psub, x = "dilution", y = "sequences") +
+    theme(axis.text.x = element_text(size = 14, angle = 45, vjust = 0.5),
+          axis.text.y = element_text(size = 14),
+          plot.title = element_text(face = "bold", size = 20, hjust = 0.5),
+          plot.subtitle = element_text(size = 16, hjust = 0.5),
+          axis.title = element_text(face = "bold", size = 16),
+          legend.position = "bottom",
+          legend.justification = 0.5,
+          legend.title = element_text(face = "bold", size = 16),
+          legend.text = element_text(size = 16),
+          legend.key.size = unit(1, "lines")) +
+    guides(fill = guide_legend(nrow = 1))
+  return(seq_bars)
+}
+
+# stacked bar plots of read counts in each class for each method
+class_comp_plot <- function(gg_table, bar_colors){
+  class_comp_bars <- ggplot(data = gg_table) +
+    geom_col(aes(x = method, y = count, 
+                 fill = factor(label, levels = c("Other", "Contam_Noisy", "Ref_Noisy", "Contaminant", "Reference"))), 
+             width = 0.5, position = position_fill()) +
+    scale_fill_manual(name = "Classification", values = bar_colors) +
+    labs(title = "", x = "method", y = "relative abundance") +
+    theme(axis.title = element_text(face = "bold"))
+  return(class_comp_bars)
 }
