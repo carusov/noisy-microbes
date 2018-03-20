@@ -1,0 +1,1231 @@
+---
+title: "Dilution series analysis"
+author: "Vincent Caruso"
+date: "August 25, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Set up the environment.
+```{r setup}
+
+library(dada2)
+library(stringr)
+library(Biostrings)
+library(tidyverse)
+library(ShortRead)
+
+options(tibble.print_min = 40, tibble.print_max = 40)
+# options(tibble.width = Inf)
+
+data_path <- "~/thesis/data/dilution_separate"
+result_path <- "~/thesis/results/dilution_separate"
+merged_path <- file.path(result_path, "merged")
+ref_path <- "~/thesis/references/zymo_SSU"
+analysis_path <- "~/thesis/analysis/dilution_separate"
+script_path <- "~/thesis/noisy-microbes/scripts"
+
+source(file.path(script_path, "seq_table_processing.R"))
+
+if (!file_test("-d", analysis_path)) dir.create(analysis_path)
+if (!file_test("-d", merged_path)) dir.create(merged_path)
+
+```
+
+##Load and format OTU/SV tables from each method
+
+Load and inspect the tables from each clustering method. Modify tables as necessary so that they all have the following format:
+
+1. Rows are OTUs or SVs
+2. The first column is the OTU/SV identifier, and the remaining columns are samples' abundances
+3. There are no comment lines (just a header with column names)
+
+After modifying the format of each table, write it back to a tab-separated '.txt' file.
+```{r load inference results}
+
+methods <- c("uclust", "uparse", "med", "unoise", "deblur", "dada2")
+samples <- str_subset(list.files(result_path), "^s\\d{3}")
+
+for (m in methods){
+  if (!file_test("-d", file.path(merged_path, m))) dir.create(file.path(merged_path, m))
+}
+
+```
+
+
+```{r load UCLUST}
+
+# load UCLUST table
+uclust_otu_file <- "uclust/otu_table.txt"
+uclust_seqs_file <- "uclust/rep_set/pooled_nochim_rep_set.fasta"
+uclust_table <- list()
+
+for (s in samples){
+  uclust_table[[s]] <- load_uclust(file.path(result_path, s, uclust_otu_file), file.path(result_path, s, uclust_seqs_file))
+}
+names(uclust_table) <- str_replace_all(names(uclust_table), '-', '\\.')
+
+uclust_table <- merge_tables(uclust_table, sample_names = names(uclust_table), collapse = FALSE, id = "keep")
+sample_names <- colnames(uclust_table)[c(-1, -length(colnames(uclust_table)))]
+uclust_table <- remove_rare(uclust_table, sample_names, min_abund = 2)  # remove singletons from all samples
+uclust_table
+write_tsv(uclust_table %>% select(-sequence), file.path(merged_path, "uclust/uclust_table.txt"))
+
+```
+
+
+```{r load UPARSE}
+
+# load UPARSE table
+uparse_otu_file <- "uparse/otu_table.txt"
+uparse_seqs_file <- "uparse/otus.fa"
+uparse_table <- list()
+
+for (s in samples){
+  uparse_table[[s]] <- load_uparse(file.path(result_path, s, uparse_otu_file),
+                                   file.path(result_path, s, uparse_seqs_file))
+}
+names(uparse_table) <- str_replace_all(names(uparse_table), '-', '\\.')
+
+uparse_table <- merge_tables(uparse_table, sample_names = names(uparse_table), collapse = FALSE, id = "keep")
+uparse_table <- remove_rare(uparse_table, sample_names, min_abund = 2)  # remove singletons
+uparse_table
+write_tsv(uparse_table %>% select(-sequence), file.path(merged_path, "uparse/uparse_table.txt"))
+
+```
+
+
+```{r load MED}
+
+# load MED table
+med_otu_file <- "med/MATRIX-COUNT.txt"
+med_seqs_file <- "med/NODE-REPRESENTATIVES.fasta"
+med_chimera_file <- "med/uchime/NODE-chimeras.fasta"
+med_table <- list()
+
+for (s in samples){
+  med_table[[s]] <- load_med(file.path(result_path, s, med_otu_file), 
+                             file.path(result_path, s, med_seqs_file), 
+                             file.path(result_path, s, med_chimera_file))
+}
+names(med_table) <- str_replace_all(names(med_table), "-", "\\.")
+
+med_table <- merge_tables(med_table, sample_names = names(med_table), collapse = FALSE, id = "keep")
+med_table <- remove_rare(med_table, sample_names, min_abund = 2)  # remove singletons
+med_table
+write_tsv(med_table %>% select(-sequence), file.path(merged_path, "med/med_table.txt"))
+
+```
+
+
+```{r load UNOISE}
+
+# load UNOISE table
+unoise_otu_file <- "unoise/zotu_table.txt"
+unoise_seqs_file <- "unoise/zotus.fa"
+unoise_table <- list()
+
+for (s in samples){
+  unoise_table[[s]] <- load_unoise(file.path(result_path, s, unoise_otu_file),
+                                   file.path(result_path, s, unoise_seqs_file))
+}
+names(unoise_table) <- str_replace_all(names(unoise_table), "-", "\\.")
+
+unoise_table <- merge_tables(unoise_table, sample_names = names(unoise_table), collapse = FALSE, id = "keep")
+unoise_table <- remove_rare(unoise_table, sample_names, min_abund = 2)  # remove singletons
+unoise_table
+write_tsv(unoise_table %>% select(-sequence), file.path(merged_path, "unoise/unoise_table.txt"))
+
+```
+
+
+```{r load Deblur table}
+
+# load Deblur table
+deblur_otu_file <- "deblur/all.txt"
+deblur_table <- list()
+
+for (s in samples){
+  deblur_table[[s]] <- load_deblur(file.path(result_path, s, deblur_otu_file))
+}
+names(deblur_table) <- str_replace_all(names(deblur_table), "-", "\\.")
+
+deblur_table <- merge_tables(deblur_table, sample_names = names(deblur_table), collapse = FALSE, id = "keep")
+
+deblur_table <- remove_rare(deblur_table, sample_names, min_abund = 2)  # remove singletons
+deblur_table
+write_tsv(deblur_table %>% select(-sequence), file.path(merged_path, "deblur/deblur_table.txt"))
+
+```
+
+
+```{r load DADA2 table}
+
+# load DADA2 table
+dada2_otu_file <- file.path(result_path, "dada2/sv_table.no_chim.txt")
+dada2_table <- load_dada2(dada2_otu_file)
+dada2_table <- remove_rare(dada2_table, sample_names, min_abund = 2)  # remove singletons
+dada2_table
+write_tsv(dada2_table %>% select(-sequence), file.path(merged_path, "dada2/dada2_table.txt"))
+
+```
+
+
+##Create and annotate a list of method tables
+
+Create a list of method tables.
+```{r create method table list}
+
+# methods <- c("uclust", "uparse", "unoise", "med", "deblur", "dada2")
+method_tables <- list(uclust_table, uparse_table, med_table, unoise_table, deblur_table, dada2_table)
+names(method_tables) <- methods
+
+```
+
+Read in reference sequences, and define a function to compute Levenshtein (Hamming + indels) distance between two sequences.
+```{r Levenshtein function}
+
+ref_fastas <- list.files(ref_path, pattern = "_16S.fasta$")
+ref_seqs <- readDNAStringSet(file.path(ref_path, ref_fastas)) %>% as.character()
+ref_strains <- sapply(str_split(names(ref_seqs), "_16S"), `[`, 1)
+
+```
+
+
+Compute distances of inferred sequences to the reference sequences for each method.
+```{r compute method distances}
+
+ref_dist_tables <- lapply(method_tables, compute_ref_dist, ref_seqs)
+strain_dist_tables <- lapply(ref_dist_tables, collapse_group_dist, ref_strains)
+
+```
+
+
+Annotate sequences in sequence tables as "reference" if they exactly match a reference sequence, or as "ref_noisy" if they are within a specified Levenshtein distance range from a reference sequence. 
+```{r annotate method reference}
+
+max_dist = 10
+method_tables <- mapply(annotate_ref, method_tables, ref_dist_tables, 
+                        MoreArgs = list(sample_names = sample_names, max_dist = max_dist),
+                        SIMPLIFY = FALSE)
+
+```
+
+
+Next, write each method's inferred (singleton-free) sequences to a fasta file, for BLASTing against nt.
+```{r write fastas}
+
+mapply(write_fasta, method_tables, file.path(analysis_path, paste(methods, "seqs.fasta", sep = "_")))
+
+# BLAST each method's sequences against the 'nt' database using the following command:
+# blastn -query method_seqs.fasta -db nt -out method_blast.txt \
+#        -task megablast -max_target_seqs 10 \
+#        -outfmt "7 qseqid qlen sseqid slen sskingdoms ssciname pident length nident mismatch gapopen gaps qstart qend sstart send evalue bitscore" \
+#        -remote
+
+```
+
+
+Read in the results of the BLAST searches.
+```{r load blast tables}
+
+blast_files <- file.path(analysis_path, paste(methods, "blast.txt", sep = "_"))
+blast_tables <- lapply(blast_files, load_blast)
+names(blast_tables) <- methods
+blast_tables <- lapply(blast_tables, annotate_blast_table)
+
+```
+
+
+Annotate sequences with distance to the nearest NT sequence, and label them as 'Contaminant' if they exactly match an NT sequence, using the results of the BLAST search.
+```{r annotate method contaminant}
+
+method_tables <- mapply(annotate_nt_dist, method_tables, blast_tables, SIMPLIFY = FALSE)
+
+method_tables <- mapply(annotate_contam, method_tables, blast_tables, 
+                        MoreArgs = list(sample_names = sample_names, max_dist = 10), 
+                        SIMPLIFY = FALSE)
+
+```
+
+
+Compute distance from sequences to Contaminant sequences.
+```{r compute distance to contam}
+
+contam_seqs <- lapply(method_tables, function(mt) return(mt %>% filter(contaminant) %>% .[["sequence"]]))
+contam_dist_tables <- mapply(compute_ref_dist, method_tables, contam_seqs, SIMPLIFY = FALSE)
+
+```
+
+
+Annotate Contam_Noisy, Other, and Consensus, then add a 'Class' factor column with the sequence classification of each sequence, with the five main classification levels.
+```{r annotate contam noisy}
+
+method_tables <- mapply(annotate_contam_like, method_tables, contam_dist_tables, blast_tables,
+                        MoreArgs = list(sample_names = sample_names, noisy_dist = 10, mut_dist = 1),
+                        SIMPLIFY = FALSE)
+
+method_tables <- lapply(method_tables, annotate_class)
+
+```
+
+
+Compute distances between `contam_noisy` and `contaminant` sequences. This should give a sense of how many `contam_noisy` sequences may have been generated through sequencer errors from `contaminant` template sequences. Also, compute distances between `contaminant` sequences. This will give an idea of whether or not OTU methods underestimate the number of `contaminant` sequences by lumping them together, if they are within the 97% similarity threshold of each other.
+```{r contam_noisy distances}
+
+
+noisy_to_contam <- lapply(method_tables, compute_inter_dist, class1 = "contam_noisy", class2 = "contaminant")
+method_tables <- mapply(annotate_inter_dist, method_tables, noisy_to_contam, 
+                        MoreArgs = list(column_name = "dist_to_contam"), SIMPLIFY = FALSE)
+
+# table minimum distances of contam_noisy sequences to contaminant sequences
+for (m in methods){
+  cat(m, "distances of contam_noisy to contaminant sequences:\n")
+  print(noisy_to_contam[[m]] %>% apply(., 1, min) %>% table())
+}
+
+
+contam_to_contam <- lapply(method_tables, compute_inter_dist, class1 = "contaminant", class2 = "contaminant")
+method_tables <- mapply(annotate_inter_dist, method_tables, contam_to_contam, 
+                        MoreArgs = list(column_name = "dist_to_contam"), SIMPLIFY = FALSE)
+
+# table minimum distances of contam_noisy sequences to contaminant sequences
+for (m in methods){
+  cat(m, "distances of contam_noisy to contaminant sequences:\n")
+  print(contam_to_contam[[m]] %>% apply(., 1, function(d) min(d[d > 0])) %>% table())
+}
+
+```
+
+
+##Create a list of tables that summarize method results
+
+Compute summary tables for each method, with total sequence counts, sequence counts in each class, and percentages of reads in each class.
+```{r compute method summaries}
+
+method_summary <- mapply(summarize_seqs, method_tables, ref_dist_tables, 
+                         MoreArgs = list(strains = ref_strains, sample_names = sample_names, max_dist = max_dist),
+                         SIMPLIFY = FALSE)
+# names(method_summary) <- c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")
+sample_summary <- method_to_sample(method_summary, "sample", "method")
+sample_summary_short <- lapply(sample_summary, function(ss){
+  return(ss %>% select(method, total, reference, ref_noisy, contaminant, contam_noisy, other))
+})
+
+method_summary <- lapply(method_summary, sanity_check_summary)
+sample_summary <- lapply(sample_summary, sanity_check_summary)
+
+lapply(method_summary, function(ms) sum(ms$total != ms$check_sum))
+lapply(sample_summary, function(ss) sum(ss$total != ss$check_sum))
+
+write_tables(method_summary, file.path(analysis_path, "method_summary_tables.tsv"))
+write_tables(sample_summary, file.path(analysis_path, "sample_summary_tables.tsv"))
+write_tables(sample_summary_short, file.path(analysis_path, "sample_summary_short_tables.tsv"))
+
+```
+
+
+From the tables, compute recall and precision for each method, using both sequences and reads as the unit of analysis.
+```{r method summary stats}
+
+method_seq_stats <- lapply(method_summary, compute_pr_seqs)
+sample_seq_stats <- lapply(sample_summary, compute_pr_seqs)
+
+method_read_stats <- lapply(method_tables, compute_pr_reads, sample_names)
+sample_read_stats <- method_to_sample(method_read_stats, "sample", "method")
+
+method_ref_perc <- lapply(method_tables, compute_ref_perc, sample_names = sample_names)
+method_ref_perc <- do.call("rbind", method_ref_perc) %>% as.data.frame() %>% rownames_to_column(var = "method") %>% as.tibble()
+
+write_tables(method_seq_stats, file.path(analysis_path, "method_seq_stats.tsv"))
+write_tables(sample_seq_stats, file.path(analysis_path, "sample_seq_stats.tsv"))
+write_tables(method_read_stats, file.path(analysis_path, "method_read_stats.tsv"))
+write_tables(sample_read_stats, file.path(analysis_path, "sample_read_stats.tsv"))
+write_tsv(method_ref_perc, file.path(analysis_path, "method_ref_perc.tsv"))
+
+```
+
+
+##Create various plots to visualize results
+
+Reformat annotated sequence tables for plotting with `ggplot`.
+```{r prep for ggplot}
+
+# Combine all method tables into one large table, then gather the sample columns into a single column
+method_tables_gg <- lapply(method_tables, gather_samples, sample_names, "sample")
+method_tables_gg <- lapply(method_tables_gg, annotate_norms, group = "sample")
+all_table_gg <- do.call("rbind", method_tables_gg) %>% mutate(method = rep(methods, times = sapply(method_tables_gg, nrow)))
+all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+                              labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+
+# add some grouping variables for plotting convenience
+all_table_gg <- all_table_gg %>% mutate(algorithm = method)
+levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "MED", EM = c("UNOISE", "Deblur", "DADA2"))
+
+```
+
+
+Create tables of sequence and read count summaries per sample and method.
+```{r summary tables}
+
+load(file.path(result_path, "dada2/tables.RData"))
+median_raw <- median(track_table[, "raw"])
+
+sample_seq_count_gg <- sapply(method_tables, function(st, ss) colSums(st[, ss] > 0), sample_names) %>%
+  t() %>% as.data.frame() %>% rownames_to_column(var = "method") %>% as.tibble()
+sample_seq_count_gg <- gather(sample_seq_count_gg, "sample", "seqs", -method)
+
+sample_read_count_gg <- sapply(method_tables, function(st, ss) colSums(st[, ss]), sample_names) %>%
+  t() %>% as.data.frame() %>% rownames_to_column(var = "method") %>% as.tibble()
+sample_read_count_gg <- gather(sample_read_count_gg, "sample", "reads", -method)
+
+sample_counts_gg <- merge(sample_read_count_gg, sample_seq_count_gg, by = c("method", "sample"))
+sample_counts_gg <- sample_counts_gg %>% group_by(method) %>% 
+  mutate(seqs_norm_method_median = round(seqs * median(reads) / reads),
+         seqs_norm_raw_median = round(seqs * median_raw / reads)) %>%
+  ungroup()
+
+sample_counts_gg <- sample_counts_gg %>% mutate(algorithm = factor(method))
+levels(sample_counts_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "MED", EM = c("UNOISE", "Deblur", "DADA2"))
+
+
+# Calculate mean signal strengths of each method's reference and non-reference sequences
+# sample_snr <- lapply(method_tables, function(mt){
+#   snr_mean <- mt[, sample_names] %>% sapply(., tapply, mt$reference, function(x) mean(log10(x[x > 0])))
+#   snr_mean <- as.tibble(rownames_to_column(as.data.frame(snr_mean), var = "reference"))
+#   return(snr_mean)
+# })
+sample_snr <- lapply(method_tables, function(mt){
+  snr_mean <- mt[, sample_names] %>% sapply(., tapply, mt$reference, function(x) mean(log10(x[x > 0])))
+  snr_mean <- snr_mean["TRUE", ] / snr_mean["FALSE", ]
+  #snr_mean <- as.tibble(rownames_to_column(as.data.frame(snr_mean), var = "reference"))
+  return(snr_mean)
+})
+sample_snr <- do.call("rbind", sample_snr) %>% as.data.frame %>% rownames_to_column(var = "method") %>% as.tibble
+#sample_snr$reference <- as.logical(sample_snr$reference)
+#sample_snr$method <- rep(methods, each = 2)
+sample_snr_gg <- gather(sample_snr, "sample", "mean_snr", one_of(sample_names))
+sample_snr_gg 
+
+sample_counts_gg <- merge(sample_counts_gg, sample_snr_gg, by = c("method", "sample")) %>% as.tibble()
+
+
+# Create plotting labels
+dilution_labels <- sapply(str_split(sample_names, "\\."), function(d){
+  paste(d[3:4], collapse = ":")
+})
+dilution_labels[1] <- "1:1"
+dilution_values <- sapply(str_split(dilution_labels, ":"), function(d) as.numeric(d[1]) / as.numeric(d[2]))
+
+
+```
+
+
+Compute Bray-Curtis similarity between each dilution sample and the neat sample, for each method.
+```{r Bray-Curtis}
+
+# normalize sequence table by median read count per method
+norm_median_tables <- lapply(method_tables, function(table){
+  seq_tab <- table[table$reference, c("id", sample_names)]
+  medn <- median(colSums(seq_tab[, sample_names]))
+  seq_tab[, sample_names] <- sapply(seq_tab[, sample_names], function(x) round(medn * (x / sum(x))))
+  seq_tab <- as.tibble(seq_tab)
+  return(seq_tab)
+})
+
+# compute Bray-Curtis similarity relative to neat sample
+bray_curtis <- lapply(norm_median_tables, function(table){
+  neat <- table[[sample_names[1]]]
+  bc <- sapply(table[, sample_names], function(sample){
+    return(2 * sum(pmin(neat, sample)) / (sum(neat) + sum(sample)))
+  })
+  return(bc)
+})
+
+bray_curtis <- do.call("rbind", bray_curtis) %>% as.tibble() %>% mutate(method = methods) %>% select(method, everything())
+
+```
+
+
+Create bar plots to show results for each category.
+```{r individual class bars}
+
+library(RColorBrewer)
+library(devtools)
+unloadNamespace("ggbeeswarm")
+unloadNamespace("ggridges")
+unloadNamespace("dada2")
+unloadNamespace("tidyverse")
+unloadNamespace("ggplot2")
+unloadNamespace("ggpubr")
+unloadNamespace("cowplot")
+dev_mode(TRUE)
+# install_github("hadley/ggplot2")
+library(ggplot2)
+packageVersion("ggplot2")
+dev_mode(F)
+library(tidyverse)
+
+theme_set(theme_bw())
+
+otu_colors <- brewer.pal(9, "YlGnBu")[c(6, 8)]
+med_color <- brewer.pal(9, "YlOrRd")[6]
+em_colors <- brewer.pal(9, "YlGn")[c(4, 6, 8)]
+method_colors <- c(otu_colors, med_color, em_colors)
+labels = paste(levels(all_table_gg$method), " ")
+
+
+total_seq_bars <- dodged_bar_plot(all_table_gg, "sample", bar_colors = method_colors, x_labels = dilution_labels)
+total_seq_bars
+
+ref_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Reference", method_colors, dilution_labels, 
+                                psub = "Exact match to mock community sequence")
+ref_seq_bars
+
+ref_noisy_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Ref Noisy", method_colors, dilution_labels,
+                                      psub = "1-10 nt off from Reference")
+ref_noisy_seq_bars
+
+contam_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Contaminant", method_colors, dilution_labels,
+                                   psub = "Exact match to NT database")
+contam_seq_bars
+
+contam_noisy_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Contam Noisy", method_colors, dilution_labels,
+                                         psub = "1-10 nt off from Contaminant")
+contam_noisy_seq_bars
+
+other_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Other", method_colors, dilution_labels,
+                                  psub = "None of the above")
+other_seq_bars
+
+
+unloadNamespace("tidyverse")
+unloadNamespace("ggplot2")
+library(ggplot2)
+packageVersion("ggplot2")
+library(tidyverse)
+
+```
+
+
+Plot counts of Contaminant, Contam_Noisy, and Other, faceted by method, to show whether these categories exhibit the same trend or not.
+```{r non-reflike and reflike sequence lines}
+
+library(ggpubr)
+
+classes = levels(all_table_gg$class)
+# class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+# class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
+# class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
+
+non_reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", !ref_like, "count") +
+  scale_color_manual(name = "Sequence class   ", values = class_colors[3:5], labels = paste(classes[3:5], "   ")) +
+  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[3:5], "   ")) +
+  facet_wrap(~method) +
+  big_labels()
+non_reflike_seq_lines
+
+contam_like_seq_lines <- dilution_line_plot(all_table_gg, "class", contaminant | contam_noisy, stat = "count", size = 1) +
+  scale_color_manual(name = "Sequence class   ", values = class_colors[c(3, 5)], labels = paste(classes[3:4], "   ")) +
+  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[3:5], "   ")) +
+  facet_wrap(~method) +
+  labs(title = "Contaminant and Contam Noisy sequences across dilution series", subtitle = "", y = "number of sequences") +
+  big_labels(legend.position = "top")
+contam_like_seq_lines
+
+reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", ref_like, "count") +
+  scale_color_manual(name = "Sequence class   ", values = class_colors[5:4], labels = paste(classes[1:2], "   ")) +
+  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[1:2], "   ")) +
+  facet_wrap(~method) +
+  big_labels()
+reflike_seq_lines
+
+ggarrange(reflike_seq_lines, non_reflike_seq_lines, labels = c("A", "B"), nrow = 2)
+
+```
+
+
+```{r percent reference lines}
+
+ref_perc_gg <- gather(method_ref_perc, key = "sample", value = "ref_perc", one_of(sample_names))
+ref_perc_lines <- ggplot(ref_perc_gg, aes(x = sample)) +
+  geom_line(aes(y = ref_perc, group = method, color = method))
+ref_perc_lines
+
+```
+
+
+Create plots to show relative strength of signal (reference sequence matches) to noise (non-reference sequences).
+```{r snr plots}
+
+library(ggbeeswarm)
+library(scales)
+
+mname = "Deblur"
+
+# ref vs. non-ref boxplots, raw counts
+snr_box <- ggplot(data = all_table_gg %>% filter(count > 0, method == mname)) +
+  geom_boxplot(aes(x = sample, y = log10_norm_med, fill = factor(reference, levels = c(TRUE, FALSE)))) +
+  labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
+  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_box
+
+# ref vs. non-ref violin plots, raw counts
+snr_violin <- ggplot(data = all_table_gg %>% filter(count > 0, method == mname)) +
+  geom_violin(aes(x = sample, y = log10_norm_med, fill = factor(reference, levels = c(T, F)))) +
+  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
+  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_violin
+
+# ref vs. non-ref beeswarm plots, raw counts
+snr_bees <- ggplot(data = all_table_gg %>% filter(count > 0, method == mname)) +
+  geom_beeswarm(aes(x = sample, y = log10_count, color = factor(reference, levels = c(T, F))), cex = 0.1, dodge.width = 0.75) +
+  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
+  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_bees
+
+snr_box_all <- ggplot(data = all_table_gg %>% filter(count > 0)) +
+  geom_boxplot(aes(x = sample, y = log10_count, 
+                   group = interaction(sample, method, factor(reference, levels = c(TRUE, FALSE))), fill = method)) +
+  labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
+          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
+  scale_fill_brewer(type = "qual", palette = 6) +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = "top",
+        legend.justification = "center",
+        legend.direction = "horizontal")
+snr_box_all
+
+snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
+  geom_boxplot(aes(x = sample, y = count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
+  labs(title = "Abundance distributions of Reference and non-Reference sequences",
+          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  scale_fill_manual(name = "Sequence type   ", 
+                    labels = c("Reference   ", "non-Reference   "), 
+                    values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~method, nrow = 3, dir = "v") +
+  big_labels(legend.position = "top")
+snr_box_facet
+
+ref_contam_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0, class %in% c("Reference", "Contaminant"))) +
+  geom_boxplot(aes(x = sample, y = count, fill = class)) +
+  labs(title = "Abundance distributions of Reference and Contaminant sequences",
+          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  scale_fill_manual(name = "Sequence type   ", 
+                    labels = c("Reference   ", "Contaminant   "), 
+                    values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~method, nrow = 3, dir = "v") +
+  big_labels(legend.position = "top")
+ref_contam_box_facet
+
+snr_box_facet2 <- ggplot(data = all_table_gg %>% filter(count > 0, method %in% c("Deblur", "MED"))) +
+  geom_boxplot(aes(x = sample, y = count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
+  labs(title = "Abundance distributions of Reference and non-Reference sequences",
+          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  scale_fill_manual(name = "Sequence type   ", 
+                    labels = paste(c("Reference", "non-Reference"), "   "), 
+                    values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~factor(method, levels = c("Deblur", "MED")), nrow = 2) +
+  big_labels(legend.position = "top")
+snr_box_facet2
+
+ref_contam_box_facet2 <- ggplot(data = all_table_gg %>% 
+                                  filter(count > 0, class %in% c("Reference", "Contaminant"), 
+                                         method %in% c("Deblur", "MED"))) +
+  geom_boxplot(aes(x = sample, y = count, fill = class)) +
+  labs(title = "Abundance distributions of Reference and Contaminant sequences",
+          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  scale_fill_manual(name = "Sequence type   ", 
+                    labels = paste(c("Reference", "Contaminant"), "   "), 
+                    values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))) +
+  facet_wrap(~factor(method, levels = c("Deblur", "MED")), nrow = 2) +
+  big_labels(legend.position = "top")
+ref_contam_box_facet2
+
+
+snr_bees_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
+  geom_beeswarm(aes(x = sample, y = log10_count, color = factor(reference, levels = c(T, F))), size = 2, cex = 0.05, dodge.width = 0.3) +
+  # labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+  #         subtitle = paste("Dilution series processed with various methods"), x = "sample dilution", y = "log10(read counts)") +
+  labs(x = "sample dilution", y = "log10(read count)") +
+  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  facet_wrap(~method, nrow = 3) +
+  theme(legend.position = "top",
+        legend.justification = "center",
+        legend.direction = "horizontal")
+snr_bees_facet + guides(color = guide_legend(override.aes = list(size = 4)))
+
+
+# average (mean(log10)) of ref vs. non-ref signal
+# mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
+#   geom_point(data = subset(sample_sn_gg, reference), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, reference), aes(color = method, group = method)) + 
+#   geom_point(data = subset(sample_sn_gg, !reference), aes(color = method, group = method)) +
+#   geom_line(data = subset(sample_sn_gg, !reference), aes(color = method, group =method))
+# mean_snr_line
+
+mean_snr_line <- ggplot(sample_counts_gg, aes(x = sample, y = mean_snr)) +
+  geom_point(aes(color = method, group = method)) +
+  geom_line(aes(color = method, group = method)) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_color_brewer(palette = "Dark2")
+mean_snr_line
+
+```
+
+
+Create plot to show sample composition, colored by reference vs. non-reference.
+```{r composition plot}
+
+library(RColorBrewer)
+
+mname = "UCLUST"
+
+set.seed(444)
+data_table <- method_tables[[tolower(mname)]]
+data_gg <- all_table_gg %>% filter(method == mname)
+
+ref_colors <- brewer.pal(sum(data_table$reference), "Dark2") %>% rev()
+other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!data_table$reference), replace = TRUE)
+
+data_table$color <- rep(NA, nrow(data_table))
+data_table$color[data_table$reference] <- ref_colors
+data_table$color[!data_table$reference] <- other_colors
+
+# color_gg <- data_table %>% select(id, sample_names, color) %>% gather("sample", "count", sample_names)
+# data_gg <- inner_join(data_gg, color_gg)
+data_gg <- data_table %>% gather("sample", "count", sample_names)
+
+comp_bar <- ggplot(data_gg, aes(x = sample, y = count)) +
+  geom_col(aes(fill = color, group = reference), width = 0.5, position = position_fill()) +  #alpha = ifelse(reference, "bright", "dull")), 
+  scale_fill_identity(name = "Organism", guide = "legend", 
+                      labels = c(paste("Ref", 1:8), rep("non-Ref", length(other_colors))), 
+                      breaks = c(ref_colors, other_colors)) +
+  scale_x_discrete(labels = dilution_labels) +
+  labs(title = "Relative composition of dilution series samples", 
+       subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "fraction of sample") +
+  theme(legend.position = "right", legend.title = element_text(size = 12), 
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(size = 20))
+comp_bar
+#comp_bar + coord_polar(theta = "y", start = 0)
+
+```
+
+
+Plot number of inferred sequences for each sample and each method.
+```{r sequence count plots}
+
+# un-normalized counts from each method
+seqs_line_unnorm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs)) +
+  geom_point(aes(color = method), size = 2) +
+  geom_line(aes(group = method, color = method)) +
+  # geom_line(aes(group = method, color = algorithm)) +
+  labs(title = "Number of inferred sequences at each concentration", subtitle = "Non-normalized counts",
+       x = "sample dilution", y = "sequence abundance") +
+  scale_color_brewer(palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = "right",
+        legend.justification = c(1, 1))
+seqs_line_unnorm
+
+# normalized by median read count after processing by each method
+seqs_line_norm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs_norm_method_median)) +
+  geom_point(aes(color = method), size = 2) +
+  geom_line(aes(group = method, color = method)) +
+  labs(title = "Number of inferred sequences at each concentration by each method", 
+       subtitle = "Normalized by median sample read count",
+       x = "sample dilution", y = "Inferred sequences (normalized)") +
+  scale_color_brewer(name = "Method", palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.1, 0.6),
+        # legend.justification = c(0.5, 0.5),
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16),
+        legend.background = element_rect(color = "black", size = 0.25, linetype = "solid"),
+        legend.key.height = unit(20, "points"),
+        axis.title = element_text(face = "bold", size = 16),
+        axis.text = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5, size = 20),
+        plot.subtitle = element_text(hjust = 0.5, size = 16))
+seqs_line_norm
+
+# same plot as above, but only the first seven samples
+seqs_line_norm_7 <- ggplot(sample_counts_gg[sample_counts_gg$sample %in% sample_names[1:7], ], aes(x = sample, y = seqs_norm_method_median)) +
+  geom_point(aes(color = method)) +
+  geom_line(aes(group = method, color = method)) +
+  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
+       subtitle = "Normalized by median output read counts (first 7 dilutions only)",
+       x = "sample dilution", y = "sequence/OTU count") +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_color_brewer(palette = "Dark2")
+seqs_line_norm_7
+
+# normalized by median count of raw (un-processed) reads
+seqs_line_norm_raw <- ggplot(sample_counts_gg, aes(x = sample, y = seqs_norm_raw_median)) +
+  geom_point(aes(color = method), size = 2) +
+  geom_line(aes(group = method, color = method)) +
+  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
+       subtitle = "Normalized by median raw reads",
+       x = "sample dilution", y = "sequence/OTU count") +
+  scale_color_brewer(palette = "Dark2") +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.05, 0.95),
+        legend.justification = c(0, 1))
+seqs_line_norm_raw
+
+```
+
+
+Create stacked histograms showing numbers of sequences vs. read count for reference and non-reference sequences.
+```{r read count histograms}
+
+library(ggridges)
+
+sname = sample_names[9]
+min_count = 100
+
+read_hist <- ggplot(all_table_gg %>% filter(sample == sname, count > min_count), 
+                    aes(x = count, y = reference)) +
+  geom_density_ridges(aes(fill = reference, height = ..density..), scale = 0.9, stat = "binline", bins = 120, panel_scaling = FALSE) +
+  geom_vline(data = all_table_gg %>% filter(sample == sname, reference) %>% group_by(method) %>% summarise(min = min(count)), aes(xintercept = min)) +
+  facet_wrap(~method) +
+  scale_fill_brewer(palette = "Dark2")
+read_hist
+
+```
+
+
+Plot bar plots of relative abundance of reference sequences, facetted by sample.
+```{r reference seq bar plots}
+
+mname <- "Deblur"
+
+ref_abundance_bars <- ggplot(data = all_table_gg %>% filter(reference, method == mname)) +
+  geom_col(aes(x = id, y = rel_count, fill = id), width = 0.8) +
+  facet_wrap(~sample) +
+  scale_fill_brewer(palette = "Dark2")
+ref_abundance_bars
+
+# ref_joy <- ggplot(data = all_table_gg %>% filter(reference, method == "uclust")) +
+#   geom_density_ridges(aes(x = id, y = sample, fill = id, height = ..density..), stat = "density")
+# ref_joy
+
+```
+
+
+Plot read counts of reference sequences across dilutions to show whether abundances maintain their relative order.
+```{r reference read counts}
+
+mname = "DADA2"
+
+ref_lines <- ggplot(data = all_table_gg %>% filter(reference, method == mname), aes(x = sample, y = norm_median)) +
+  geom_line(aes(group = id, color = id)) +
+  geom_point(aes(color = id)) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_color_brewer(palette = "Dark2")
+  #facet_wrap(~method)
+ref_lines
+
+```
+
+
+Plot composition of samples in terms of sequence classification, facetted by method.
+```{r class sequences composition}
+
+# class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
+
+class_seqs_comp <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
+  geom_bar(aes(fill = fct_rev(class)),
+           width = 0.8) +
+  facet_wrap(~method) +
+  # scale_fill_brewer(name = "Class", type = "qual", palette = 6) +
+  scale_fill_manual(name = "Sequence class", values = rev(class_colors),
+                    guide = guide_legend(reverse = F)) +
+  scale_x_discrete(labels = dilution_labels) +
+  labs(title = "Composition of dilution series communities by sequence class", 
+       subtitle = "", x = "dilution", y = "sequences") +
+  big_labels(legend.position = "right")
+class_seqs_comp
+
+```
+
+
+Plot the read-level composition of samples by sequence class. 
+```{r class reads composition}
+
+# class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
+# class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
+# class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
+
+class_reads_comp_method <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
+  geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.7) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
+                    guide = guide_legend(reverse = TRUE)) +
+  facet_wrap(~method, nrow = 2) +
+  labs(title = "Read-level composition by sequence class across dilution series",
+       subtitle = "", y = "relative abundance") +
+  big_labels(angle = 90, hjust = 1, vjust = 0.5, legend.position = "top")
+class_reads_comp_method
+
+class_reads_comp_sample <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
+  geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.8) +
+  scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
+                    guide = guide_legend(reverse = TRUE)) +
+  facet_wrap(~sample, nrow = 1) +
+  labs(title = "Read-level composition by sequence class across dilution series",
+       subtitle = "", y = "relative abundance") +
+  big_labels()
+class_reads_comp_sample
+
+class_reads_comp <- ggplot(all_table_gg %>% arrange(desc(class)), aes(x = sample)) +
+  geom_col(aes(y = rel_count, fill = class, group = interaction(sample, method)), position = position_dodge(), width = 0.9) +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
+                    guide = guide_legend(reverse = TRUE)) +
+  labs(title = "Read-level composition by sequence class across dilution series",
+       subtitle = "", y = "relative abundance") +
+  big_labels(angle = 90, hjust = 1, vjust = 0.5, legend.position = "top")
+class_reads_comp
+
+
+
+```
+
+
+
+Plot Bray-Curtis distances of each dilution sample's reference sequences relative to the neat sample for each method.
+```{r bray-curtis lines}
+
+bc_gg <- gather(bray_curtis, "sample", "bc_similarity", one_of(sample_names))
+
+bc_lines <- ggplot(data = bc_gg, aes(x = sample, y = bc_similarity, color = method)) +
+  geom_line(aes(group = method)) +
+  geom_point() +
+  scale_x_discrete(labels = dilution_labels) +
+  scale_color_brewer(palette = "Dark2")
+bc_lines
+
+```
+
+
+Plot distribution boxplots of non-reference read counts for "contaminant" sequences vs non-contaminant ("other") sequences.
+```{r snr contaminant vs other}
+
+mname = "DADA2"
+
+#snr_box_contam <- ggplot(dada2_gg[!dada2_gg$reference & !dada2_gg$noisy, ], aes(x = sample, y = log10_norm)) +
+snr_box_contam <- ggplot(all_table_gg %>% filter(count > 0, method == mname, !ref_like), aes(x = sample, y = log10_norm_med)) +
+  geom_boxplot(aes(fill = factor(contam_like, levels = c(TRUE, FALSE)))) +
+  labs(title = "Distribution of log10(read counts) for non-reference contaminant and non-contaminant sequences",
+          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
+  scale_fill_manual(name = "sequence identity", labels = c("contaminant-like", "other"), values = c("blue", "orange")) +
+  scale_x_discrete(labels = dilution_labels) +
+  theme(legend.position = c(0.95, 0.05),
+        legend.justification = c(1, 0))
+snr_box_contam
+
+```
+
+
+Plot bar plots of summary stats (number of "reference", "ref_noisy", "contaminant", "other").
+```{r summary stat bar plots}
+
+all_summary_gg <- do.call("rbind", method_summary) %>% as.tibble %>% mutate(method = rep(methods, each = length(sample_names)))
+all_summary_gg <- gather(all_summary_gg, "statistic", "value", -sample, -method)
+
+ref_mean <- all_table_gg %>% filter(reference) %>% .[["count"]] %>% mean()
+ref_noisy_mean <- all_table_gg %>% filter(ref_noisy) %>% .[["count"]] %>% mean()
+contam_mean <- all_table_gg %>% filter(contaminant) %>% .[["count"]] %>% mean()
+contam_noisy_mean <- all_table_gg %>% filter(contam_noisy) %>% .[["count"]] %>% mean()
+other_mean <- all_table_gg %>% filter(other) %>% .[["count"]] %>% mean()
+
+all_summary_gg <- all_summary_gg %>% mutate(norm_median = rep(1, nrow(all_summary_gg)))
+all_summary_gg[all_summary_gg$statistic == "reference", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "reference") %>% .[["value"]] * log10(ref_mean)
+all_summary_gg[all_summary_gg$statistic == "noisy", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "ref_noisy") %>% .[["value"]] * log10(ref_noisy_mean)
+all_summary_gg[all_summary_gg$statistic == "contaminant", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "contaminant") %>% .[["value"]] * log10(contam_mean)
+all_summary_gg[all_summary_gg$statistic == "contam_noisy", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "contam_noisy") %>% .[["value"]] * log10(contam_mean)
+all_summary_gg[all_summary_gg$statistic == "other", "norm_median"] <- all_summary_gg %>% 
+  filter(statistic == "other") %>% .[["value"]] * log10(other_mean)
+
+bar_colors <- brewer.pal(9, "Set1")
+
+summary_bars <- ggplot(data = all_summary_gg %>% filter(statistic %in% c("reference", "ref_noisy", "contaminant", "contam_noisy", "other")), 
+                       aes(x = sample)) +
+  geom_col(aes(y = log2(1 + value), fill = statistic), position = position_dodge()) +
+  facet_wrap(~method) +
+  scale_fill_manual(values = ref_colors[c(1, 3, 4, 6, 8)])
+  #scale_fill_brewer(palette = "Set1")
+summary_bars
+
+summary_pct_bars <- ggplot(data = all_summary_gg %>% filter(statistic %in% c("pct_ref", "pct_ref_noisy", "pct_contam", "pct_contam_noisy", "pct_other")), 
+                       aes(x = sample)) +
+  geom_col(aes(y = value, fill = statistic), position = position_dodge()) +
+  facet_wrap(~method) +
+  scale_fill_manual(values = bar_colors[c(3, 4, 5, 2, 1)])
+  #scale_fill_brewer(palette = "Set1")
+summary_pct_bars
+
+```
+
+
+##Conduct some accessory analyses
+
+Investigate how many of the filtered input reads are represented in the processed sequence tables. Is there much of a difference in how many reads are "kept" at different dilutions, or by different methods?
+```{r reads kept}
+
+# Get the number of raw reads and filtered reads for each sample
+prefixes <- unique(sapply(str_subset(list.files(file.path(data_path, "raw")), "s\\d+.*"), str_replace, "_R.*", ""))
+raw_reads <- sapply(prefixes, function(f) length(readFastq(file.path(data_path, "raw"), pattern = paste0(f, "_R1"))))
+filtered_reads <- sapply(prefixes, function(f) length(readFastq(file.path(data_path, "filtered"), pattern = f)))
+
+kept_reads <- matrix(0, nrow = length(methods), ncol = length(sample_names))
+row.names(kept_reads) <- methods
+colnames(kept_reads) <- sample_names
+
+kept_reads["uclust", ] <- colSums(uclust_table[, sample_names]) / filtered_reads
+kept_reads["uparse", ] <- colSums(uparse_table[, sample_names]) / raw_reads  # need to modify this to subtract unmapped reads
+kept_reads["unoise", ] <- colSums(unoise_table[, sample_names]) / raw_reads  # same as previous line
+kept_reads["med", ] <- colSums(med_table[, sample_names]) / filtered_reads
+kept_reads["deblur", ] <- colSums(deblur_table[, sample_names]) / filtered_reads
+kept_reads["dada2", ] <- track_table[, "non_chim"] / track_table[, "filtered"]
+
+kept_reads <- as.tibble(rownames_to_column(as.data.frame(kept_reads), var = "method"))
+kept_reads_gg <- gather(kept_reads, "sample", "pct_kept", sample_names)
+
+library(directlabels)
+
+# plot kept reads across dilutions, color-coded by method
+kept_lines <- ggplot(kept_reads_gg, aes(x = sample, y = pct_kept)) +
+  geom_line(aes(group = method, color = method)) +
+  geom_dl(aes(label = method), method = list(dl.combine("first.qp", "last.qp"))) +
+  labs(title = "Fraction of input reads represented in the processed output",
+          x = "sample dilution", y = "proportion of input reads") + 
+  scale_x_discrete(labels = dilution_labels)
+kept_lines
+
+```
+
+
+Examine the relationship between read count and dilution at the sequence level. Are they correlated, and is the correlation positive or negative?
+```{r dilution correlation}
+
+# define a function to compute the Spearman correlation between rows of a sequence table and a specified vector of values
+seqCor <- function(seq_tab, samples, vals) {
+  sapply(seq_along(seq_tab[[1]]), function(row) {
+    cor(seq_tab %>% select(samples) %>% slice(row) %>% unlist(., use.names = FALSE), vals, method = "spearman")
+  })
+}
+
+method_tables <- lapply(method_tables, function(mt, snames, dilutions) {
+  mt$dilution_cor <- seqCor(mt, snames, dilutions)
+  return(mt)
+}, snames = sample_names, dilutions = dilution_values)
+
+# What are the dilution correlations for the reference sequences?
+method_tables$uclust %>% filter(reference) %>% select(sample_names, dilution_cor)
+
+# How many "contaminant-like" sequences have very strong negative correlations?
+method_tables$uclust %>% filter(dilution_cor <= -.9, contam_like) %>% select(sample_names, dilution_cor)
+
+# How many sequences are "contaminant-like" and have less than three zero sequence counts?
+method_tables$dada2 %>% filter(contam_like, rowSums(.[, sample_names] == 0) < 3) %>% select(sample_names, dilution_cor)
+
+# Of these, how many have negative dilution correlations?
+method_tables$dada2 %>% filter(contam_like, rowSums(.[, sample_names] == 0) < 3, dilution_cor < 0) %>% 
+  select(sample_names, dilution_cor)
+
+# How many unclassified ("other") sequences have less than three zero counts?
+method_tables$dada2 %>% filter(other, rowSums(.[, sample_names] == 0) < 4) %>% select(sample_names, dilution_cor)
+
+# Of these, how many have negative dilution correlations?
+method_tables$uparse %>% filter(other, rowSums(.[, sample_names] == 0) < 4, dilution_cor < 0) %>% 
+  select(sample_names, dilution_cor)
+
+```
+
+
+Plot ratio of dada2 ASV_3 to ASV_8.
+```{r}
+
+# ratio <-  dada2_table %>% filter(id %in% c("ASV_3", "ASV_8")) %>% select(sample_names) 
+# ratio <- ratio[1,] / ratio[2,]
+# ratio <- gather(ratio, "sample", "ratio")
+# 
+# ggplot(data = dada2_gg %>% filter(id %in% c("ASV_3", "ASV_8")), aes(x = sample, y = count)) +
+#   geom_line(aes(group = id, color = id)) +
+#   geom_point(aes(color = id))
+# 
+# ggplot(ratio, aes(x = sample, y = ratio)) +
+#   geom_line() +
+#   geom_point()
+
+```
+
+
+Here, I'm going to perform a very simple analysis with the `phyloseq` package. The idea is to mimic a "typical" pre-processing analysis that a microbiome researcher might do with a dataset of biological sample(s). Namely, I'm going to investigate the effect of two common filtering/data reduction techniques applied to the already-clustered sequence/OTU tables:
+1. Filtering candidate sequences/OTUs using a relative abundance threshold (e.g. 0.1% of total sample read count)
+2. Combining similar sequences/OTUs using a taxonomy table by agglomerating to the genus level
+First, I'll create `phyloseq` object to facilitate the analysis.
+```{r create phyloseq}
+
+library("phyloseq")
+
+# extract sequence matrices of read counts only from the method sequence tibbles
+seq_mats <- lapply(method_tables, function(mt){
+  seq_mat <- as.matrix(mt[, sample_names])
+  rownames(seq_mat) <- mt$id
+  return(seq_mat)
+})
+
+# load taxonomy tables
+tax_mats <- lapply(list.files(result_path), function(f){
+  tax_table <- read.table(file.path(result_path, f, paste0(f, "_taxa.txt")), header = TRUE, sep = "\t")
+  tax_mat <- as.matrix(tax_table)
+  return(tax_mat)
+})
+names(tax_mats) <- list.files(result_path)
+tax_mats <- tax_mats[methods]
+
+# extract sequences from taxonomy tables and convert to DNAStringSet
+seqs_list <- lapply(tax_mats, function(t) DNAStringSet(t[, 1]))
+
+# remove sequences from taxonomy tables
+tax_mats <- lapply(tax_mats, function(t) t[, -1])
+
+# construct phyloseq OTU and taxonomy tables
+otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
+tax_tabs <- lapply(tax_mats, tax_table)
+
+# construct phyloseq objects
+# physeqs <- mapply(phyloseq, otu_tabs, tax_tabs, seqs_list, SIMPLIFY = FALSE)
+physeqs <- mapply(phyloseq, otu_tabs, SIMPLIFY = FALSE)
+
+sam_data <- as.data.frame(physeqs[[1]]@sam_data)
+
+# remove intermediate objects
+rm(seq_mats, tax_mats, seqs_list, otu_tabs, tax_tabs)
+
+```
+
+
+```{r}
+
+library(decontam)
+
+short_names <- sapply(str_split(sample_names, "\\."), `[`, 1)
+otu_tabs <- lapply(method_tables, function(mt){
+  mt_small <- mt[, sample_names[1:7]]
+  colnames(mt_small) <- short_names[1:7]
+  return(mt_small)
+})
+
+s_data <- read.table(file.path(data_path, "sam_data_mock316.txt"), header = TRUE, sep = "\t")
+
+phylos <- lapply(otu_tabs, function(ot){
+  physeq <- phyloseq(otu_table(ot, taxa_are_rows = TRUE), sample_data(s_data[1:7, ]))
+  return(physeq)
+})
+
+  
+contam.freqs <- lapply(phylos, isContaminant, method = "frequency", conc = "DNA_conc", threshold = 0.3)
+
+for (i in seq_along(contam.freqs)){
+  print(names(contam.freqs[i]))
+  print(table(contam.freqs[[i]][["contaminant"]]))
+}
+
+# phylos.nocontam <- prune_taxa(!contam.freq$contaminant, phylos)
+phylos.nocontam <- mapply(function(cf, p) return(prune_taxa(!cf$contaminant, p)), contam.freqs, phylos, SIMPLIFY = FALSE)
+
+```
+
+
+Now I'll implement the filtering described above.
+```{r phyloseq filter}
+
+# convert sequence tables to relative abundances
+read_counts <- lapply(physeqs, sample_sums)
+physeqs.rel <- lapply(physeqs, transform_sample_counts, function(x) x / sum(x))
+
+# remove observations that are below 0.1% relative abundance
+physeqs.ab0.1 <- lapply(physeqs.rel, function(ps) {
+  transform_sample_counts(ps, function(x) ifelse(x >= 1e-3, x, 0))
+})
+physeqs.ab0.1 <- lapply(physeqs.ab0.1, function(ps) {
+  prune_taxa(taxa_sums(ps) > 0, ps)
+})
+invisible(mapply(function(ps, psa, id) cat("Total number of mock community sequences before filtering", toupper(id), "table:", ntaxa(ps), "\n",
+                                           "Total number after filtering out sequences below 0.1% relative abundance:", ntaxa(psa), "\n\n"),
+                 physeqs, physeqs.ab0.1, names(physeqs)))
+
+# alternatively, agglomerate each OTU table to the genus level
+physeqs.genus <- lapply(physeqs, tax_glom, taxrank = "Genus", NArm = FALSE)
+
+# now apply both filters in sequence
+physeqs.ab0.1.genus <- lapply(physeqs.ab0.1, tax_glom, taxrank = "Genus", NArm = FALSE)
+
+```
+
+
+Finally, convert the `phyloseq` OTU tables back to tibbles, and annotate them as was done above.
+```{r annotate filtered tables}
+
+# extract OTU tables from phyloseq objects
+method_tables.filt <- mapply(function(ps, rc) {
+  table <- otu_table(ps) 
+  table <- sweep(table, MARGIN = 2, STATS = rc, `*`)
+  table <- table %>% as.data.frame() %>% rownames_to_column(var = "id") %>% as.tibble()
+  table$sequence <- refseq(ps) %>% as.character()
+  return(table)
+  },
+  physeqs.ab0.1.genus, read_counts, SIMPLIFY = FALSE)
+
+# annotate the filtered OTU tables
+method_tables.filt <- mapply(function(mf, mt) {
+  midx <- match(mf$sequence, mt$sequence)
+  vars <- c("id", "ref_dist", "hit", "noisy", "ref_like", "perfect", "one_off", "contaminant", "other", "consensus", "dilution_cor")
+  ann_tab <- mt[midx, vars]
+  ann_tab <- full_join(mf, ann_tab, by = "id")
+  return(ann_tab)
+}, method_tables.filt, method_tables, SIMPLIFY = FALSE)
+
+```
+
