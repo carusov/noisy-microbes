@@ -10,8 +10,8 @@
 ### Usage: run_all_pipelines.sh
 
 # Set the default input, output, and reference directories
-INDIR=~/thesis/data/dilution
-OUTDIR=~/thesis/results/dilution
+#INDIR=~/thesis/data/dilution
+#OUTDIR=~/thesis/results/dilution
 REFDIR=~/thesis/references
 
 # Set default sequence length and filtering parameters
@@ -53,11 +53,15 @@ do
 	-R|--maxee_R)
 	    MAXEE_R="$2"
 	    shift;;
+	-m|--mode)
+	    MODE="$2"
+	    shift;;
 	-h|--help)
 	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory]\n"
 	    printf "\t\t\t [-o output_directory] [-r reference_directory]\n"
 	    printf "\t\t\t [-f fwd_trunc_pos] [-b rev_trunc_pos]\n"
-	    printf "\t\t\t [-s min_merge_length] [-l max_merge_length]\n\n"
+	    printf "\t\t\t [-s min_merge_length] [-l max_merge_length]\n"
+	    printf "\t\t\t [-m mode]\n\n"
 	    exit;;
 	*)
 
@@ -66,15 +70,19 @@ do
     shift
 done
 
+# Convert any relative paths to absolute paths
+INDIR=$(readlink -f "$INDIR")
+OUTDIR=$(readlink -f "$OUTDIR")
+REFDIR=$(readlink -f "$REFDIR")
+
 printf "\nINPUT DIRECTORY = "${INDIR}""
 printf "\nOUTPUT DIRECTORY = "${OUTDIR}""
 printf "\nREFERENCE DIRECTORY = "${REFDIR}""
-#printf "\nForward reads will be truncated at position %d" $FTRUNC
-#printf "\nReverse reads will be truncated at position %d" $RTRUNC
 printf "\nMinimum merge length: %d" $MIN_LEN
 printf "\nMaximum merge length: %d" $MAX_LEN
 printf "\nMaximum expected errors (DADA2 forward): %0.2f" $MAXEE_F
 printf "\nMaximum expected errors (DADA2 reverse): %0.2f" $MAXEE_R
+printf "\nProcessing mode: "${MODE}""
 
 
 # Create the output directory, if necessary
@@ -82,50 +90,49 @@ if [ ! -d "$OUTDIR" ]; then
     mkdir $OUTDIR
 fi
 
-# Run the UCLUST pipeline
-printf "\n######################################################################\n"
-printf "\nRunning the UCLUST pipeline...\n"
-printf "\n######################################################################\n"
-uclust_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
-		   -o $OUTDIR/uclust \
-		   -r $REFDIR/gold.fa
+# If pooled mode is selected, run five pipelines on the pooled fasta file
+if [[ "$MODE" == pooled ]]; then
+    run_5_pipelines.sh -q "$INDIR"/filtered/pooled_filtered.fastq \
+		       -a "$INDIR"/filtered/pooled_filtered.fasta \
+		       -o "$OUTDIR" \
+		       -r "$INDIR"/merged/pooled_merged.fastq \
+		       -R "$REFDIR" \
+		       -t $MIN_LEN
 
-# Run the UPARSE pipeline
-printf "\n######################################################################\n"
-printf "\nRunning the UPARSE pipeline...\n"
-printf "\n######################################################################\n"
-uparse_pipeline.sh -i $INDIR/filtered/pooled_filtered.fastq \
-		   -o $OUTDIR/uparse \
-		   -r $INDIR/merged/pooled_merged.fastq
+# If separate mode is selected, run five pipelines on each sample fasta separately
+elif [[ "$MODE" == separate ]]; then
+    for s in $(ls "$INDIR"/filtered | egrep '^s[0-9]{3}.*\.fastq');
+    do
+	fname="${s%.fastq}"
+	sname="${s%_*.fastq}"
+	fastq="$s"
+	fasta="$fname".fasta
+	raw="$sname"_merged.fastq
 
-# Run the UNOISE pipeline
-printf "\n######################################################################\n"
-printf "\nRunning the UNOISE pipeline...\n"
-printf "\n######################################################################\n"
-unoise_pipeline.sh -i $INDIR/filtered/pooled_filtered.fastq \
-		   -o $OUTDIR/unoise \
-		   -r $INDIR/merged/pooled_merged.fastq
+	run_5_pipelines.sh -q "$INDIR"/filtered/"$fastq" \
+			   -a "$INDIR"/filtered/"$fasta" \
+			   -o "$OUTDIR"/"$sname" \
+			   -r "$INDIR"/merged/"$raw" \
+			   -R "$REFDIR" \
+			   -t $MIN_LEN
 
-# Run the MED pipeline
-printf "\n######################################################################\n"
-printf "\nRunning the MED pipeline...\n"
-printf "\n######################################################################\n"
-med_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
-		-o $OUTDIR/med
+	echo
+	echo "Done with sample "${sname}""
+	echo
+    done
+else
+    echo "Invalid MODE parameter. Must be one of 'pooled' or 'separate'"
+    echo
+    exit 1
+fi
 
-# Run the Deblur pipeline
-printf "\n######################################################################\n"
-printf "\nRunning the Deblur pipeline...\n"
-printf "\n######################################################################\n"
-deblur_pipeline.sh -i $INDIR/filtered/pooled_filtered_qiime.fasta \
-		   -o $OUTDIR/deblur \
-		   -t $MIN_LEN
 
-# Run the DADA2 pipeline with defaults
+# Run the DADA2 pipeline with defaults (DADA2 always processes samples separately)
 # First, make sure we have the latest version of the script
 SCRIPTS=~/thesis/noisy-microbes/scripts
-cd $SCRIPTS
+pushd $SCRIPTS
 rmd2r.R -i dada2_pipeline.Rmd
+popd
 
 # Now run it
 printf "\n######################################################################\n"
@@ -134,5 +141,3 @@ printf "\n######################################################################
 Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR/dada2 \
 	-s $MIN_LEN -l $MAX_LEN \
 	-F $MAXEE_F -R $MAXEE_R
-#	-f $FTRUNC -b $RTRUNC 
-
