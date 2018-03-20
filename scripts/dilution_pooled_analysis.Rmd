@@ -366,6 +366,57 @@ bray_curtis <- do.call("rbind", bray_curtis) %>% as.tibble() %>% mutate(method =
 ```
 
 
+Create bar plots to show results for each category.
+```{r individual class bars}
+
+library(RColorBrewer)
+library(devtools)
+dev_mode(on = TRUE)
+# install_github("hadley/ggplot2")
+unloadNamespace("ggbeeswarm")
+unloadNamespace("ggridges")
+unloadNamespace("dada2")
+unloadNamespace("tidyverse")
+unloadNamespace("ggplot2")
+library(ggplot2)
+packageVersion("ggplot2")
+dev_mode(F)
+library(tidyverse)
+
+theme_set(theme_bw())
+
+otu_colors <- brewer.pal(9, "YlGnBu")[c(6, 8)]
+med_color <- brewer.pal(9, "YlOrRd")[6]
+em_colors <- brewer.pal(9, "YlGn")[c(4, 6, 8)]
+method_colors <- c(otu_colors, med_color, em_colors)
+
+
+total_seq_bars <- dodged_bar_plot(all_table_gg, "sample", bar_colors = method_colors, x_labels = dilution_labels)
+total_seq_bars
+
+ref_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Reference", method_colors, dilution_labels, 
+                                psub = "Exact match to mock community sequence")
+ref_seq_bars
+
+ref_noisy_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Ref_Noisy", method_colors, dilution_labels,
+                                      psub = "1-10 nt off from Reference")
+ref_noisy_seq_bars
+
+contam_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Contaminant", method_colors, dilution_labels,
+                                   psub = "Exact match to NT database")
+contam_seq_bars
+
+contam_noisy_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Contam_Noisy", method_colors, dilution_labels,
+                                         psub = "1-3 nt off from Contaminant")
+contam_noisy_seq_bars
+
+other_seq_bars <- dodged_bar_plot(all_table_gg, "sample", "Other", method_colors, dilution_labels,
+                                  psub = "None of the above")
+other_seq_bars
+
+```
+
+
 Create stacked histograms showing numbers of sequences vs. read count for reference and non-reference sequences.
 ```{r read count histograms}
 
@@ -389,8 +440,11 @@ Create plots to show relative strength of signal (reference sequence matches) to
 ```{r snr plots}
 
 library(ggbeeswarm)
+library(scales)
 
 theme_set(theme_bw())
+
+all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "dada2", "deblur", "unoise"))
 
 mname = "deblur"
 
@@ -439,29 +493,45 @@ snr_box_all <- ggplot(data = all_table_gg %>% filter(count > 0)) +
         legend.direction = "horizontal")
 snr_box_all
 
-snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
-  geom_boxplot(aes(x = sample, y = log10_norm_med, fill = factor(reference, levels = c(TRUE, FALSE)))) +
-  labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "log10(read counts)") +
-  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0, method %in% c("deblur", "med"))) +
+  geom_boxplot(aes(x = sample, y = count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
+  labs(title = "Abundance distributions of Reference and non-Reference sequences",
+          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  scale_fill_manual(name = "Sequence type", labels = c("Reference", "non-Reference"), values = c("blue", "orange")) +
   scale_x_discrete(labels = dilution_labels) +
-  facet_wrap(~method, nrow = 3) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))) +
+  # facet_wrap(~factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+  #                    labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")), nrow = 3) +
+  facet_wrap(~factor(method, levels = c("deblur", "med"),
+                     labels = c("Deblur", "MED")), nrow = 3) +
   theme(legend.position = "top",
         legend.justification = "center", 
-        legend.direction = "horizontal")
+        legend.direction = "horizontal",
+        legend.title = element_text(face = "bold", size = 18),
+        legend.text = element_text(size = 18),
+        legend.key.size = unit(1, "lines"),
+        axis.title = element_text(face = "bold", size = 18),
+        axis.text.x = element_text(size = 16, angle = 45, vjust = 0.5),
+        axis.text.y = element_text(size = 16),
+        plot.title = element_text(face = "bold", hjust = 0.5, size = 20),
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        strip.text = element_text(size = 18))
 snr_box_facet
 
 snr_bees_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
-  geom_beeswarm(aes(x = sample, y = log10_count, color = factor(reference, levels = c(T, F))), cex = 0.15, dodge.width = 0.3) +
-  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = paste("Dilution series processed with various methods"), x = "sample dilution", y = "log10(read counts)") +
+  geom_beeswarm(aes(x = sample, y = log10_count, color = factor(reference, levels = c(T, F))), size = 2, cex = 0.05, dodge.width = 0.3) +
+  # labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+  #         subtitle = paste("Dilution series processed with various methods"), x = "sample dilution", y = "log10(read counts)") +
+  labs(x = "sample dilution", y = "log10(read count)") +
   scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
   scale_x_discrete(labels = dilution_labels) +
   facet_wrap(~method, nrow = 3) +
   theme(legend.position = "top",
         legend.justification = "center",
         legend.direction = "horizontal")
-snr_bees_facet
+snr_bees_facet + guides(color = guide_legend(override.aes = list(size = 4)))
+
 
 # average (mean(log10)) of ref vs. non-ref signal
 # mean_snr_line <- ggplot(sample_sn_gg, aes(x = sample, y = mean_log10)) +
@@ -527,10 +597,11 @@ Plot number of inferred sequences for each sample and each method.
 
 # un-normalized counts from each method
 seqs_line_unnorm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs)) +
-  geom_point(aes(color = method, shape = method), size = 2) +
-  geom_line(aes(group = method, color = algorithm)) +
-  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", subtitle = "Non-normalized counts",
-       x = "sample dilution", y = "sequence/OTU count") +
+  geom_point(aes(color = method), size = 2) +
+  geom_line(aes(group = method, color = method)) +
+  # geom_line(aes(group = method, color = algorithm)) +
+  labs(title = "Number of inferred sequences at each concentration", subtitle = "Non-normalized counts",
+       x = "sample dilution", y = "sequence abundance") +
   scale_color_brewer(palette = "Dark2") +
   scale_x_discrete(labels = dilution_labels) +
   theme(legend.position = "right",
@@ -541,13 +612,21 @@ seqs_line_unnorm
 seqs_line_norm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs_norm_method_median)) +
   geom_point(aes(color = method), size = 2) +
   geom_line(aes(group = method, color = method)) +
-  labs(title = "Number of inferred sequences/OTUs at each concentration by each method", 
-       subtitle = "Normalized by median output read counts",
-       x = "sample dilution", y = "sequence/OTU count") +
-  scale_color_brewer(palette = "Dark2") +
+  labs(title = "Number of inferred sequences at each concentration by each method", 
+       subtitle = "Normalized by median sample read count",
+       x = "sample dilution", y = "Inferred sequences (normalized)") +
+  scale_color_brewer(name = "Method", palette = "Dark2") +
   scale_x_discrete(labels = dilution_labels) +
-  theme(legend.position = c(0.95, 0.05),
-        legend.justification = c(1, 0))
+  theme(legend.position = c(0.1, 0.6),
+        # legend.justification = c(0.5, 0.5),
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16),
+        legend.background = element_rect(color = "black", size = 0.25, linetype = "solid"),
+        legend.key.height = unit(20, "points"),
+        axis.title = element_text(face = "bold", size = 16),
+        axis.text = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5, size = 20),
+        plot.subtitle = element_text(hjust = 0.5, size = 16))
 seqs_line_norm
 
 # same plot as above, but only the first seven samples
@@ -577,16 +656,42 @@ seqs_line_norm_raw
 ```
 
 
+Plot counts of Contaminant, Contam_Noisy, and Other, faceted by method, to show whether these categories exhibit the same trend or not.
+```{r}
+
+all_table_gg <- all_table_gg %>% mutate(sample_num = as.integer(as.factor(sample)))
+
+non_reflike_seq_lines <- ggplot(all_table_gg %>% filter(contam_like, count > 0), aes(x = sample_num)) +
+  geom_path(aes(color = label), stat = "count") +
+  geom_point(aes(color = label), stat = "count") +
+  scale_color_brewer(name = "Seqeunce class", palette = "Dark2") +
+  scale_x_continuous(breaks = 1:9, labels = dilution_labels) +
+  facet_wrap(~method) +
+  labs(title = "Contaminant and Contam Noisy sequences reported across dilution series",
+       subtitle = "", x = "dilution", y = "number of sequences") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5),
+        plot.title = element_text(size = 20),
+        axis.title = element_text(face = "bold", size = 16),
+        legend.position = "top",
+        legend.justification = 0.5,
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16),
+        legend.key.height = unit(20, "points"))
+non_reflike_seq_lines
+
+```
+
+
 Plot bar plots of relative abundance of reference sequences, facetted by sample.
 ```{r reference seq bar plots}
 
 mname <- "deblur"
 
-ref_bars <- ggplot(data = all_table_gg %>% filter(reference, method == mname)) +
+ref_abundance_bars <- ggplot(data = all_table_gg %>% filter(reference, method == mname)) +
   geom_col(aes(x = id, y = rel_count, fill = id), width = 0.8) +
   facet_wrap(~sample) +
   scale_fill_brewer(palette = "Dark2")
-ref_bars
+ref_abundance_bars
 
 # ref_joy <- ggplot(data = all_table_gg %>% filter(reference, method == "uclust")) +
 #   geom_density_ridges(aes(x = id, y = sample, fill = id, height = ..density..), stat = "density")
@@ -612,19 +717,81 @@ ref_lines
 
 
 Plot composition of samples in terms of sequence classification, facetted by method.
-```{r class composition}
+```{r class sequences composition}
 
-class_comp <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
+class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+
+class_seqs_comp <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
   geom_bar(aes(fill = factor(label, levels = c("Other", "Contam_Noisy", "Ref_Noisy", "Contaminant", "Reference"))),
            width = 0.8) +
-  facet_wrap(~method) +
+  facet_wrap(~factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"))) +
   scale_fill_brewer(name = "Class", type = "qual", palette = 6) +
+  # scale_fill_manual(name = "Sequence class", values = class_colors) +
   scale_x_discrete(labels = dilution_labels) +
-  labs(title = "Composition of dilution series communities by sequence class", x = "relative dilution") +
-  theme(plot.title = element_text(size = 18, hjust = 0), axis.text.x = element_text(angle = 90))
-class_comp
+  labs(title = "Composition of dilution series communities by sequence class", 
+       subtitle = "", x = "dilution", y = "sequences") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(size = 20),
+        axis.title = element_text(face = "bold", size = 16),
+        legend.position = "right",
+        legend.justification = 0.5,
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16),
+        legend.key = element_rect(size = 20, color = "white"),
+        legend.key.size = unit(1, "lines")) 
+class_seqs_comp
 
 ```
+
+
+```{r class reads composition}
+
+# class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
+# class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
+class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+
+class_reads_comp_sample <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
+  geom_col(aes(y = count, fill = factor(label, levels = c("Other", "Contam_Noisy", "Contaminant", "Ref_Noisy", "Reference"),
+                                        labels = c("Other  ", "Contam_Noisy  ", "Contaminant  ", "Ref_Noisy  ", "Reference"))),
+           position = position_fill(), width = 0.5) +
+  scale_fill_manual(name = "Sequence class", values = class_colors) +
+  facet_wrap(~sample) +
+  labs(title = "Read-level composition by sequence class across dilution series",
+       subtitle = "", y = "relative abundance") +
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5),
+        plot.title = element_text(size = 20),
+        axis.title = element_text(face = "bold", size = 16),
+        legend.position = "top",
+        legend.justification = 0.5,
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16),
+        legend.key = element_rect(size = 20, color = "white"),
+        legend.key.size = unit(1, "lines")) 
+class_reads_comp_sample
+
+class_reads_comp_method <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
+  geom_col(aes(y = count, fill = factor(label, levels = c("Other", "Contam_Noisy", "Contaminant", "Ref_Noisy", "Reference"))),
+           position = position_fill(), width = 0.8) +
+  scale_fill_manual(name = "Sequence class", values = class_colors) +
+  scale_x_discrete(labels = dilution_labels) +
+  facet_wrap(~factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2")), nrow = 1) +
+  labs(title = "Read-level composition by sequence class across dilution series",
+       subtitle = "", x = "dilution", y = "relative abundance") +
+  theme(axis.text.x = element_text(size = 14, angle = 90, vjust = 0.5),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(size = 20, hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 16),
+        legend.position = "top",
+        legend.justification = 0.5,
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16)) +
+  guides(fill = guide_legend(reverse = TRUE))
+        # legend.key.size = unit(10, "points"))
+class_reads_comp_method
+
+```
+
+
 
 Plot Bray-Curtis distances of each dilution sample's reference sequences relative to the neat sample for each method.
 ```{r bray-curtis lines}
@@ -834,10 +1001,45 @@ otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
 tax_tabs <- lapply(tax_mats, tax_table)
 
 # construct phyloseq objects
-physeqs <- mapply(phyloseq, otu_tabs, tax_tabs, seqs_list, SIMPLIFY = FALSE)
+# physeqs <- mapply(phyloseq, otu_tabs, tax_tabs, seqs_list, SIMPLIFY = FALSE)
+physeqs <- mapply(phyloseq, otu_tabs, SIMPLIFY = FALSE)
+
+sam_data <- as.data.frame(physeqs[[1]]@sam_data)
 
 # remove intermediate objects
 rm(seq_mats, tax_mats, seqs_list, otu_tabs, tax_tabs)
+
+```
+
+
+```{r}
+
+library(decontam)
+
+short_names <- sapply(str_split(sample_names, "\\."), `[`, 1)
+otu_tabs <- lapply(method_tables, function(mt){
+  mt_small <- mt[, sample_names[1:7]]
+  colnames(mt_small) <- short_names[1:7]
+  return(mt_small)
+})
+
+s_data <- read.table(file.path(data_path, "sam_data_mock316.txt"), header = TRUE, sep = "\t")
+
+phylos <- lapply(otu_tabs, function(ot){
+  physeq <- phyloseq(otu_table(ot, taxa_are_rows = TRUE), sample_data(s_data[1:7, ]))
+  return(physeq)
+})
+
+  
+contam.freqs <- lapply(phylos, isContaminant, method = "frequency", conc = "DNA_conc", threshold = 0.3)
+
+for (i in seq_along(contam.freqs)){
+  print(names(contam.freqs[i]))
+  print(table(contam.freqs[[i]][["contaminant"]]))
+}
+
+# phylos.nocontam <- prune_taxa(!contam.freq$contaminant, phylos)
+phylos.nocontam <- mapply(function(cf, p) return(prune_taxa(!cf$contaminant, p)), contam.freqs, phylos, SIMPLIFY = FALSE)
 
 ```
 
