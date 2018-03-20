@@ -80,7 +80,8 @@ filt_Rs <- paste0(sample_names, "_filt_R2.fastq")
 filt_stats <- filterAndTrim(fwd = file.path(trunc_path, trunc_Fs), filt = file.path(filt_path, filt_Fs),
                             rev = file.path(trunc_path, trunc_Rs), filt.rev = file.path(filt_path, filt_Rs),
                             #truncLen = c(240, 220), trimLeft = 15, maxEE = c(3, 4), truncQ = 2, rm.phix = TRUE, 
-                            maxEE = c(opt$maxee_F, opt$maxee_R), #truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = 15, truncQ = 2, rm.phix = TRUE, 
+                            maxEE = c(opt$maxee_F, opt$maxee_R), 
+                            #truncLen = c(opt$ftrunc, opt$rtrunc), trimLeft = 15, truncQ = 2, rm.phix = TRUE, 
                             compress = FALSE, verbose = TRUE, multithread = TRUE)
 
 
