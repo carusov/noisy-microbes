@@ -167,17 +167,11 @@ load_dada2 <- function(otu_file_path, sample_names = NULL){
     colnames(dada2_table)[-1] <- sample_names
   }  
   
+  dada2_table <- dada2_table[order(dada2_table[[ sample_names[1] ]], decreasing = TRUE), ]
   dada2_table$id <- paste0("ASV_", 1:nrow(dada2_table))
   dada2_table <- dada2_table %>% select(id, sample_names, sequence)
   
   return(dada2_table)
-}
-
-
-# define a function to remove sequences below a minimum abundance across all samples
-filter_abund_across <- function(seq_table, sample_names, min_abund = 2){
-  seq_table <- seq_table[rowSums(seq_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
-  return(seq_table)
 }
 
 
@@ -193,6 +187,54 @@ remove_rare <- function(seq_table, sample_names, min_abund = 2, discard_empty = 
 }
 
 
+# define a function to remove sequences below a minimum abundance across all samples
+remove_rare_across <- function(seq_table, sample_names, min_abund = 2){
+  seq_table <- seq_table[rowSums(seq_table[, sample_names]) >= min_abund, ]  # remove sequences with less than min_abund reads across samples
+  return(seq_table)
+}
+
+
+# define a function to detect if a string is a substring of any in a vector of strings
+is_substring <- function(pattern, string){
+  return(any(grepl(pattern, string, fixed = TRUE)))
+}
+
+
+# define a function to combine tables from several methods for a single sample into one
+merge_tables <- function(table_list, sample_names, collapse = FALSE, id = NULL){
+  all_seqs <- sapply(table_list, function(t) return(t$sequence)) %>% unlist() %>% unique()
+  all_table <- matrix(0, nrow = length(table_list), ncol = length(all_seqs))
+  row.names(all_table) <- names(table_list)
+  colnames(all_table) <- all_seqs
+  
+  # populate the new table with sequence abundances 
+  for (n in names(table_list)){
+    cols <- colnames(table_list[[n]])  # get the column names of an input table
+    # scol <- cols[cols %in% sample_names]
+    scol <- cols[sapply(cols, is_substring, sample_names)]  # find the column name that corresponds to the sample
+    all_table[n, table_list[[n]]$sequence] <- table_list[[n]][[scol]]  # populate the appropriate merged table row with sample abundances
+  }
+  
+  if (collapse) all_table <- collapseNoMismatch(all_table)
+  
+  if (is.null(id)){
+    prefix <- "Seq"
+  } else if (id == "keep"){
+    prefix <- str_split(table_list[[1]]$id[1], "_")[[1]][1]
+  } else{
+    prefix <- id
+  }
+  
+  all_table <- data.frame(t(all_table))
+  all_table <- rownames_to_column(all_table, var = "sequence") %>% as.tibble()
+  all_table <- all_table[order(all_table[[ names(table_list)[1] ]], decreasing = TRUE), ]
+  all_table <- all_table %>% mutate(id = paste(prefix, 1:nrow(all_table), sep = "_")) %>% 
+    select(id, names(table_list), sequence)
+  
+  return(all_table)
+}
+
+
 # define a function to compute Levenshtein distances between two sequences
 levDist <- Vectorize(function(query, ref, ...) {
   mmi <- dada2:::nweval(query, ref, ...)    # this gives matches, mismatches, and indels
@@ -205,7 +247,7 @@ levDist <- Vectorize(function(query, ref, ...) {
 
 
 # function to compute distances between inferred and reference sequences
-compute_dist_to_ref <- function(seq_table, ref_seqs){
+compute_ref_dist <- function(seq_table, ref_seqs){
   dist_mat <- outer(seq_table$sequence, ref_seqs, levDist, band = -1)
   row.names(dist_mat) <- seq_table$id
   return(dist_mat)
@@ -262,7 +304,7 @@ countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
 
 
 # function that returns whether sequences of a sequence table are "noisy"
-isRefNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
+isNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
   if (max(colSums(dist_mat == 0)) > 1) {
     print("WARNING: Your distance matrix contains seqeunces that are identical except for length differences.")
     print("This may result in inaccurate counts of noisy seuqences.")
@@ -272,32 +314,44 @@ isRefNoisy <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3){
     stop("The sequence table must only contain column vectors of type 'integer' or 'numeric'.")
   }
   
-  mins <- apply(dist_mat, 1, min)   # get minimum distance for each sequence
   noisy_ind <- which(dist_mat >= min_dist & dist_mat <= max_dist, arr.ind = TRUE) 
   if (length(noisy_ind) == 0){
     return(rep(FALSE, nrow(dist_mat)))
   } 
-  else {
-    noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
-    has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
-    noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
-    ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)   # find the nearest sequence that matches the reference
-    noisy_ind <- cbind(noisy_ind, ref = ref_row)
-    is_noisy <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
-                    (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref"], ]) )   # is abundance less than reference?
-    is_noisy <- apply(is_noisy, 1, any)   # collapse to vector
-    noisy_ind <- noisy_ind[is_noisy, , drop = FALSE]    # remove any with abundance higher than reference
-    noisy <- 1:nrow(dist_mat) %in% noisy_ind[, "row"]  
-    return(noisy)
+
+  mins <- apply(dist_mat, 1, min)   # get minimum distance for each sequence
+  noisy_ind <- noisy_ind[dist_mat[noisy_ind] == mins[noisy_ind[, "row"]], , drop = FALSE]   # make sure it's a minimum distance
+  if (length(noisy_ind) == 0){
+    return(rep(FALSE, nrow(dist_mat)))
   }
+  
+  has_zero <- apply(dist_mat[, noisy_ind[, "col"], drop = FALSE], 2, min) == 0  # is there a hit to the nearest reference?
+  noisy_ind <- noisy_ind[has_zero, , drop = FALSE]
+  if (length(noisy_ind) == 0){
+    return(rep(FALSE, nrow(dist_mat)))
+  }
+  
+  ref_row <- apply(dist_mat[, noisy_ind[, "col"] , drop = FALSE] == 0, 2, which)   # find the nearest sequence that matches the reference
+  noisy_ind <- cbind(noisy_ind, ref = ref_row)
+  is_noisy <- ( (seq_tab[noisy_ind[, "row"], ] > 0) & 
+                  (seq_tab[noisy_ind[, "row"], ] < seq_tab[noisy_ind[, "ref"], ]) )   # is abundance less than nearest reference abundance?
+  is_noisy <- apply(is_noisy, 1, any)   # collapse to vector
+  noisy_ind <- noisy_ind[is_noisy, , drop = FALSE]    # remove any with abundance higher than reference
+  if (length(noisy_ind) == 0){
+    return(rep(FALSE, nrow(dist_mat)))
+  }
+  
+  noisy <- 1:nrow(dist_mat) %in% noisy_ind[, "row"]  
+  return(noisy)
+
 }
 
 
 # function to annotate sequence table with 'Reference' and 'Ref_Noisy'
 annotate_ref <- function(seq_table, dist_mat, sample_names, max_dist = 3){
-  seq_table$dist_to_ref <- apply(dist_mat, 1, min)
-  seq_table$reference <- seq_table$dist_to_ref == 0
-  seq_table$ref_noisy <- isRefNoisy(seq_table[, sample_names], dist_mat, 1, max_dist)
+  seq_table$ref_dist <- apply(dist_mat, 1, min)
+  seq_table$reference <- seq_table$ref_dist == 0
+  seq_table$ref_noisy <- isNoisy(seq_table[sample_names], dist_mat, max_dist = max_dist)
   seq_table$ref_like <- seq_table$reference | seq_table$ref_noisy
   return(seq_table)
 }
@@ -322,24 +376,41 @@ load_blast <- function(blast_path){
 }
 
 
+# function to annotate BLAST table with distance between query and subject sequence
+annotate_blast_table <- function(blast_tab){
+  blast_tab$lev_dist <- blast_tab$mismatches + blast_tab$gaps  # compute Levenshtein distances, not counting terminal gaps
+  blast_tab$cov_dist <- pmax(blast_tab$seq_len - blast_tab$aln_len, 0)  # compute number of terminal gaps, if any
+  blast_tab$tot_dist <- blast_tab$lev_dist + blast_tab$cov_dist  # sum the two to get the total distance between sequences
+  return(blast_tab)
+}
+
+
+# function to annotate sequence table with distance to nearest NT sequence
+annotate_nt_dist <- function(seq_tab, blast_tab){
+  nt_dist <- tapply(blast_tab$tot_dist, INDEX = list(blast_tab$seqID), FUN = min)
+  seq_tab$nt_dist <- nt_dist[seq_tab$id]
+  return(seq_tab)
+}
+
+
 # function to identify exact matches to BLAST results
 isBlastHit <- function(seq_tab, blast_tab){
-  perfect_hits <- blast_tab[ (blast_tab$identity == 100) & 
-                               (blast_tab$seq_len == blast_tab$aln_len), ]
+  perfect_hits <- blast_tab %>% filter(tot_dist == 0)
+  # perfect_hits <- blast_tab[ (blast_tab$identity == 100) & 
+  #                              (blast_tab$seq_len == blast_tab$aln_len), ]
   return(seq_tab$id %in% perfect_hits$seqID)
 }
 
 
 # function to identify sequences that are similar, but not exact matches, to BLAST results
-isBlastNoisy <- function(seq_tab, blast_tab, min_off = 1, max_off = 3){
+isBlastNoisy <- function(seq_tab, blast_tab, min_dist = 1, max_dist = 3){
   # annotate blast table to facilitate computation of differences between query and subject (nt) sequences
-  blast_tab$lev_dist <- blast_tab$mismatches + blast_tab$gaps  # compute Levenshtein distances, not counting terminal gaps
-  blast_tab$cov_dist <- pmax(blast_tab$seq_len - blast_tab$aln_len, 0)  # compute number of terminal gaps, if any
-  blast_tab$tot_dist <- blast_tab$lev_dist + blast_tab$cov_dist  # sum the two to get the total distance between sequences
+  # blast_tab$lev_dist <- blast_tab$mismatches + blast_tab$gaps  # compute Levenshtein distances, not counting terminal gaps
+  # blast_tab$cov_dist <- pmax(blast_tab$seq_len - blast_tab$aln_len, 0)  # compute number of terminal gaps, if any
+  # blast_tab$tot_dist <- blast_tab$lev_dist + blast_tab$cov_dist  # sum the two to get the total distance between sequences
   
   noisies <- blast_tab %>% group_by(seqID) %>% filter(tot_dist == min(tot_dist)) %>% ungroup() # only consider nearest hit for each sequence
-  # noisies <- blast_tab[between(blast_tab$tot_dist, min_off, max_off), ]
-  noisies <- noisies[between(noisies$tot_dist, min_off, max_off), ]
+  noisies <- noisies[between(noisies$tot_dist, min_dist, max_dist), ]
   is_noisy <- seq_tab$id %in% noisies$seqID
   
   hits <- isBlastHit(seq_tab, blast_tab)
@@ -349,36 +420,37 @@ isBlastNoisy <- function(seq_tab, blast_tab, min_off = 1, max_off = 3){
 }
 
 
-# function to annotate sequence table with 'Contaminant' and 'Contam_Noisy'
-annotate_contam <- function(seq_table, blast_table, sample_names, max_off = 3){
+# function to annotate sequence table with 'Contaminant' and 'Contam_Mut'
+annotate_contam <- function(seq_table, blast_table, sample_names, max_dist = 3){
   seq_table$contaminant <- isBlastHit(seq_table, blast_table) & !seq_table$ref_like
-  seq_table$contam_noisy <- isBlastNoisy(seq_table, blast_table, 1, max_off) & !seq_table$ref_like
-  seq_table$contam_like <- seq_table$contaminant | seq_table$contam_noisy
-  seq_table$other <- !seq_table$ref_like & !seq_table$contam_like
-  seq_table$consensus <- apply(seq_table[, sample_names], 1, min) > 0
+  # seq_table$contam_mut <- isBlastNoisy(seq_table, blast_table, 1, max_dist) & !seq_table$ref_like
+  # seq_table$contam_noisy <- isNoisy(seq_table, contam_dist, max_dist = max_dist) & !seq_table$ref_like
+  # seq_table$contam_like <- seq_table$contaminant | seq_table$contam_mut
+  # seq_table$other <- !seq_table$ref_like & !seq_table$contam_like
+  # seq_table$consensus <- apply(seq_table[, sample_names], 1, min) > 0
   return(seq_table)
 }
 
 
-# function to add a class label column to an annotated sequence table
-annotate_class <- function(seq_table){
-  seq_table$label <- factor(rep("Other", nrow(seq_table)), levels = c("Reference", "Ref_Noisy", "Contaminant", "Contam_Noisy", "Other"))
-  seq_table$label[seq_table$reference] <- "Reference"
-  seq_table$label[seq_table$ref_noisy] <- "Ref_Noisy"
-  seq_table$label[seq_table$contaminant] <- "Contaminant"
-  seq_table$label[seq_table$contam_noisy] <- "Contam_Noisy"
+# function to annotate sequence table with 'Contam_Noisy', 'Contam_Like', and 'Other'
+annotate_contam_like <- function(seq_table, dist_mat, blast_table, sample_names, noisy_dist = 3, mut_dist = 1){
+  seq_table$contam_dist <- apply(dist_mat, 1, min)
+  seq_table$contam_noisy <- isNoisy(seq_table[sample_names], dist_mat, max_dist = noisy_dist) & !seq_table$ref_like
+  seq_table$contam_mut <- isBlastNoisy(seq_table, blast_table, max_dist = mut_dist) & !seq_table$ref_like & !seq_table$contam_noisy
+  seq_table$contam_like <- seq_table$contaminant | seq_table$contam_noisy | seq_table$contam_mut 
+  seq_table$other <- !seq_table$ref_like & !seq_table$contaminant & !seq_table$contam_noisy
   return(seq_table)
 }
 
 
 # function to compute distances between sequences in the same table
-compute_inter_dist <- function(seq_tab, label1, label2){
-  label1_seqs <- seq_tab %>% filter(!!as.name(label1)) %>% .$sequence
-  names(label1_seqs) <- seq_tab %>% filter(!!as.name(label1)) %>% .$id
-  label2_seqs <- seq_tab %>% filter(!!as.name(label2)) %>% .$sequence
-  names(label2_seqs) <- seq_tab %>% filter(!!as.name(label2)) %>% .$id
-  label1_to_label2 <- outer(label1_seqs, label2_seqs, levDist, band = -1)
-  return(label1_to_label2)
+compute_inter_dist <- function(seq_tab, class1, class2){
+  class1_seqs <- seq_tab %>% filter(!!as.name(class1)) %>% .$sequence
+  names(class1_seqs) <- seq_tab %>% filter(!!as.name(class1)) %>% .$id
+  class2_seqs <- seq_tab %>% filter(!!as.name(class2)) %>% .$sequence
+  names(class2_seqs) <- seq_tab %>% filter(!!as.name(class2)) %>% .$id
+  class1_to_class2 <- outer(class1_seqs, class2_seqs, levDist, band = -1)
+  return(class1_to_class2)
 }
 
 
@@ -389,8 +461,24 @@ annotate_inter_dist <- function(seq_tab, inter_dist, column_name){
   if (!column_name %in% colnames(seq_tab)){
     seq_tab <- seq_tab %>% mutate(!!column_name := rep(NA, nrow(seq_tab)))
   }
+  if (length(inter_dist) == 0){
+    return(seq_tab)
+  }
   seq_tab[seq_tab$id %in% row.names(inter_dist), column_name] <- apply(inter_dist, 1, function(d) min(d[d > 0]))
   return(seq_tab)
+}
+
+
+# function to add a class label column to an annotated sequence table
+annotate_class <- function(seq_table){
+  seq_table$class <- factor(rep("Other", nrow(seq_table)), 
+                            levels = c("Reference", "Ref Noisy", "Contaminant", "Contam Noisy", "Other"))
+  seq_table$class[seq_table$reference] <- "Reference"
+  seq_table$class[seq_table$ref_noisy] <- "Ref Noisy"
+  seq_table$class[seq_table$contaminant] <- "Contaminant"
+  seq_table$class[seq_table$contam_noisy] <- "Contam Noisy"
+  # seq_table$class[seq_table$contam_mut] <- "Contam Mut"
+  return(seq_table)
 }
 
 
@@ -403,7 +491,7 @@ count_strains <- function(seq_vector, strain_dist){
 
 
 # function to create a summary table from a sequence table
-summarize_seqs <- function(seq_table, dist_mat, sample_names, strains, max_dist){
+summarize_seqs <- function(seq_table, dist_mat, strains, sample_names, max_dist){
   # summarize counts of various classes
   exp_strains <- rep(length(unique(strains)), length(sample_names))
   total_count <- colSums(seq_table[, sample_names] > 0)
@@ -416,6 +504,7 @@ summarize_seqs <- function(seq_table, dist_mat, sample_names, strains, max_dist)
   contam_count <- colSums(seq_table[, sample_names] > 0 & seq_table$contaminant)
   contam_noisy_count <- colSums(seq_table[, sample_names] > 0 & seq_table$contam_noisy)
   contam_like_count <- colSums(seq_table[, sample_names] > 0 & seq_table$contam_like)
+  contam_mut_count <- colSums(seq_table[sample_names] > 0 & seq_table$contam_mut)
   other_count <- colSums(seq_table[, sample_names] > 0 & seq_table$other)
   
   # summarize percentage of primary classes
@@ -429,7 +518,8 @@ summarize_seqs <- function(seq_table, dist_mat, sample_names, strains, max_dist)
                               strains = strain_count,
                               reference = ref_count, ref_noisy_count, ref_like = ref_like_count,
                               contaminant = contam_count, contam_noisy = contam_noisy_count, 
-                              contam_like = contam_like_count, other = other_count, 
+                              contam_mut = contam_mut_count, contam_like = contam_like_count, 
+                              other = other_count, 
                               pct_ref = ref_pct, pct_ref_noisy = ref_noisy_pct, 
                               pct_contam = contam_pct, pct_contam_noisy = contam_noisy_pct,
                               pct_other = other_pct,
@@ -479,10 +569,11 @@ write_tables <- function(table_list, file_path, overwrite = TRUE){
   }
   
   header = paste(colnames(table_list[[1]]), collapse = "\t")
+  write(header, file_path, append = TRUE)
   tab_names <- names(table_list)
   for (i in seq_along(table_list)){
-    write(c("\n", tab_names[i]), file_path, append = TRUE)
-    write(header, file_path, append = TRUE)
+    # write(c("\n", tab_names[i]), file_path, append = TRUE)
+    # write(header, file_path, append = TRUE)
     write_tsv(table_list[[i]], file_path, append = TRUE)
   }
   
@@ -527,6 +618,16 @@ compute_pr_reads <- function(seq_tab, sample_names, sample_colname = "sample"){
 }
 
 
+# function to compute percentage of sample reads inferred as reference
+compute_ref_perc <- function(seq_tab, sample_names){
+  ref_reads <- seq_tab %>% filter(reference) %>% select(sample_names) %>% colSums()
+  all_reads <- seq_tab %>% select(sample_names) %>% colSums()
+  ref_percent <- 100 * ref_reads / all_reads
+  names(ref_percent) <- sample_names
+  return(ref_percent)
+}
+
+
 # function to gather sample counts into a single column
 gather_samples <- function(seq_table, sample_names, sample_colname){
   gg_table <- gather(seq_table, !!sample_colname, "count", one_of(sample_names)) %>%
@@ -560,6 +661,24 @@ annotate_norms <- function(all_seq_table, group){
 #
 ###############################################################################
 
+theme_set(theme_bw())
+
+# function to define general theme parameters
+big_labels <- function(angle = 45, hjust = 1, vjust = 1, legend.position = "bottom", key.size = 1){
+  theme(axis.text.x = element_text(size = 14, angle = angle, hjust = hjust, vjust = vjust),
+        axis.text.y = element_text(size = 14),
+        plot.title = element_text(face = "bold", size = 20, hjust = 0.5),
+        plot.subtitle = element_text(size = 16, hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 16),
+        strip.text = element_text(size = 16),
+        legend.position = legend.position,
+        legend.justification = 0.5,
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 16, hjust = 1),
+        # legend.spacing.x = unit(1.5,"cm"),
+        legend.key.size = unit(key.size, "lines")) 
+}
+
 # ref vs. non-ref beeswarm plots, log10 raw counts
 snr_beeswarm_plot <- function(gg_table, x_var, x_label, point_colors = c("blue", "orange"), title){
   
@@ -582,15 +701,18 @@ dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_la
     ptitle <- "Total inferred sequences"
   }
   else {
-    gg_data <- gg_table %>% filter(label == seq_label, count > 0)
+    gg_data <- gg_table %>% filter(class == seq_label, count > 0)
     ptitle <- paste(seq_label, "sequences")
   }
   
+  labels <- paste(levels(gg_table$method), "   ")
+  
   seq_bars <- ggplot(gg_data, aes_string(x = x_axis)) +
-    geom_bar(aes(fill = factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"))), 
+    # geom_bar(aes(fill = factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"))), 
+    geom_bar(aes(fill = method), 
              width = 0.8, position = position_dodge(preserve = "single")) +
     # scale_fill_brewer(name = "Class", type = "qual", palette = 3) +
-    scale_fill_manual(name = "Method", values = bar_colors) +
+    scale_fill_manual(name = "Method   ", values = bar_colors, labels = labels) +
     scale_x_discrete(labels = x_labels) +
     labs(title = ptitle, 
          subtitle = psub, x = "dilution", y = "sequences") +
@@ -602,7 +724,8 @@ dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_la
           legend.position = "bottom",
           legend.justification = 0.5,
           legend.title = element_text(face = "bold", size = 16),
-          legend.text = element_text(size = 16),
+          legend.text = element_text(size = 16, hjust = 1),
+          # legend.spacing.x = unit(1.5,"cm"),
           legend.key.size = unit(1, "lines")) +
     guides(fill = guide_legend(nrow = 1))
   return(seq_bars)
@@ -612,10 +735,22 @@ dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_la
 class_comp_plot <- function(gg_table, bar_colors){
   class_comp_bars <- ggplot(data = gg_table) +
     geom_col(aes(x = method, y = count, 
-                 fill = factor(label, levels = c("Other", "Contam_Noisy", "Ref_Noisy", "Contaminant", "Reference"))), 
+                 fill = factor(class, levels = c("Other", "Contam Noisy", "Ref Noisy", "Contaminant", "Reference"))), 
              width = 0.5, position = position_fill()) +
     scale_fill_manual(name = "Classification", values = bar_colors) +
     labs(title = "", x = "method", y = "relative abundance") +
     theme(axis.title = element_text(face = "bold"))
   return(class_comp_bars)
+}
+
+
+# plot lines across dilution series
+dilution_line_plot <- function(gg_table, group_var, filter_var = NULL, stat, size = 0.5){
+  filter_var <- enquo(filter_var)
+
+  ggplot(gg_table %>% filter(!! filter_var, count > 0), aes(x = sample)) +
+    geom_line(aes_string(group = group_var, color = group_var), stat = stat, size = size) +
+    geom_point(aes_string(color = group_var), stat = stat, size = 2 * size) +
+    scale_x_discrete(labels = dilution_labels) +
+    xlab("dilution")
 }
