@@ -17,6 +17,7 @@ library(stringr)
 library(Biostrings)
 library(tidyverse)
 library(ShortRead)
+library(RColorBrewer)
 
 options(tibble.print_min = 40, tibble.print_max = 40)
 # options(tibble.width = Inf)
@@ -24,7 +25,8 @@ options(tibble.print_min = 40, tibble.print_max = 40)
 data_path <- "~/thesis/data/dilution_separate"
 result_path <- "~/thesis/results/dilution_separate"
 merged_path <- file.path(result_path, "merged")
-ref_path <- "~/thesis/references/zymo_SSU"
+ref_path <- "~/thesis/references"
+zymo_ref <- file.path(ref_path, "zymo_SSU")
 analysis_path <- "~/thesis/analysis/dilution_separate"
 script_path <- "~/thesis/noisy-microbes/scripts"
 
@@ -188,8 +190,8 @@ names(method_tables) <- methods
 Read in reference sequences, and define a function to compute Levenshtein (Hamming + indels) distance between two sequences.
 ```{r Levenshtein function}
 
-ref_fastas <- list.files(ref_path, pattern = "_16S.fasta$")
-ref_seqs <- readDNAStringSet(file.path(ref_path, ref_fastas)) %>% as.character()
+ref_fastas <- list.files(zymo_ref, pattern = "_16S.fasta$")
+ref_seqs <- readDNAStringSet(file.path(zymo_ref, ref_fastas)) %>% as.character()
 ref_strains <- sapply(str_split(names(ref_seqs), "_16S"), `[`, 1)
 
 ```
@@ -310,7 +312,7 @@ method_summary <- mapply(summarize_seqs, method_tables, ref_dist_tables,
                          MoreArgs = list(strains = ref_strains, sample_names = sample_names, max_dist = max_dist),
                          SIMPLIFY = FALSE)
 # names(method_summary) <- c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")
-sample_summary <- method_to_sample(method_summary, "sample", "method")
+sample_summary <- transpose_table_list(method_summary, "sample", "method")
 sample_summary_short <- lapply(sample_summary, function(ss){
   return(ss %>% select(method, total, reference, ref_noisy, contaminant, contam_noisy, other))
 })
@@ -324,6 +326,37 @@ lapply(sample_summary, function(ss) sum(ss$total != ss$check_sum))
 write_tables(method_summary, file.path(analysis_path, "method_summary_tables.tsv"))
 write_tables(sample_summary, file.path(analysis_path, "sample_summary_tables.tsv"))
 write_tables(sample_summary_short, file.path(analysis_path, "sample_summary_short_tables.tsv"))
+
+```
+
+
+Assign taxonomy to the sequences.
+```{r assign taxonomy}
+
+genus_db <- "silva_nr_v132_train_set.fa.gz"
+species_db <- "silva_species_assignment_v132.fa.gz"
+taxa <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+method_tables <- lapply(method_tables, assign_taxonomy, 
+                         genus_db_path = file.path(ref_path, genus_db), 
+                         species_db_path = file.path(ref_path, species_db))
+
+```
+
+
+Now, compute summary tables at the taxonomy level
+```{r compute taxonomy summaries}
+
+method_taxa_summary <- lapply(method_tables, summarize_taxa, sample_names = sample_names, group = sample)
+method_taxa_summary <- lapply(method_taxa_summary, function(mts){
+  mts$sample <- factor(mts$sample, labels = dilution_labels)
+  return(mts)
+})
+names(method_taxa_summary) <- c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")
+sample_taxa_summary <- transpose_table_list(method_taxa_summary, "sample", "method")
+write_tables(method_taxa_summary, file.path(analysis_path, "method_taxa_summary_tables.tsv"))
+write_tables(sample_taxa_summary, file.path(analysis_path, "sample_taxa_summary_tables.tsv"))
+write_tables(sample_taxa_summary, file.path(analysis_path, "sample_taxa_compact.tsv"), compact = TRUE)
 
 ```
 
@@ -355,7 +388,7 @@ Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
 
 # Combine all method tables into one large table, then gather the sample columns into a single column
-method_tables_gg <- lapply(method_tables, gather_samples, sample_names, "sample")
+method_tables_gg <- lapply(method_tables, gather_samples, sample_names, sample)
 method_tables_gg <- lapply(method_tables_gg, annotate_norms, group = "sample")
 all_table_gg <- do.call("rbind", method_tables_gg) %>% mutate(method = rep(methods, times = sapply(method_tables_gg, nrow)))
 all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
@@ -364,6 +397,15 @@ all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse"
 # add some grouping variables for plotting convenience
 all_table_gg <- all_table_gg %>% mutate(algorithm = method)
 levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "MED", EM = c("UNOISE", "Deblur", "DADA2"))
+
+# combine taxa summary tables for plotting
+taxa_summary_gg <- bind_rows(method_taxa_summary) %>%
+  mutate(method = rep(methods, times = sapply(method_taxa_summary, nrow)))
+taxa_summary_gg$method <- factor(taxa_summary_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+                              labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+taxa_summary_gg <- gather(taxa_summary_gg, "class", "taxa", one_of(classes))
+taxa_summary_gg$class <- factor(taxa_summary_gg$class, 
+                                levels = c("Reference", "Ref Noisy", "Contaminant", "Contam Noisy", "Other"))
 
 ```
 
@@ -517,36 +559,144 @@ Plot counts of Contaminant, Contam_Noisy, and Other, faceted by method, to show 
 library(ggpubr)
 
 classes = levels(all_table_gg$class)
-# class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
-# class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
+class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
 # class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
-class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
+# class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
+ref_colors <- brewer.pal(12, "Paired")[c(2, 1)] #, brewer.pal(8, "Dark2")[2])
+contam_colors <- brewer.pal(12, "Paired")[c(8, 7, 10)]
 
-non_reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", !ref_like, "count") +
-  scale_color_manual(name = "Sequence class   ", values = class_colors[3:5], labels = paste(classes[3:5], "   ")) +
-  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[3:5], "   ")) +
+
+
+non_reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", !ref_like, "count", size = 1) +
+  scale_color_manual(name = "Sequence class   ", values = contam_colors, labels = paste(classes[3:5], "   ")) +
+  ylab("sequences") +
   facet_wrap(~method) +
-  big_labels()
+  big_labels(title = 20, text = 18, legend.position = "top") +
+  guides(color = guide_legend(override.aes = list(size = 3)))
 non_reflike_seq_lines
 
 contam_like_seq_lines <- dilution_line_plot(all_table_gg, "class", contaminant | contam_noisy, stat = "count", size = 1) +
   scale_color_manual(name = "Sequence class   ", values = class_colors[c(3, 5)], labels = paste(classes[3:4], "   ")) +
-  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[3:5], "   ")) +
+  ylab("sequences") +
   facet_wrap(~method) +
   labs(title = "Contaminant and Contam Noisy sequences across dilution series", subtitle = "", y = "number of sequences") +
   big_labels(legend.position = "top")
 contam_like_seq_lines
 
-reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", ref_like, "count") +
-  scale_color_manual(name = "Sequence class   ", values = class_colors[5:4], labels = paste(classes[1:2], "   ")) +
-  # scale_color_brewer(name = "Seqeunce class   ", palette = "Dark2", labels = paste(classes[1:2], "   ")) +
+reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", ref_like, "count", size = 1) +
+  scale_color_manual(name = "Sequence class   ", values = ref_colors, labels = paste(classes[1:2], "   ")) +
+  ylab("sequences") +
   facet_wrap(~method) +
-  big_labels()
+  big_labels(title = 20, text = 18, legend.position = "top") +
+  guides(color = guide_legend(override.aes = list(size = 3)))
 reflike_seq_lines
 
-ggarrange(reflike_seq_lines, non_reflike_seq_lines, labels = c("A", "B"), nrow = 2)
+ggarrange(reflike_seq_lines, non_reflike_seq_lines, labels = c("A", "B"), nrow = 2, font.label = list(size = 24))
 
 ```
+
+
+Now create bar plots to show results for each category, but at the assigned taxonomy.
+```{r individual class taxa bars}
+
+library(RColorBrewer)
+library(devtools)
+unloadNamespace("ggbeeswarm")
+unloadNamespace("ggridges")
+unloadNamespace("dada2")
+unloadNamespace("tidyverse")
+unloadNamespace("ggplot2")
+unloadNamespace("ggpubr")
+unloadNamespace("cowplot")
+dev_mode(TRUE)
+# install_github("hadley/ggplot2")
+library(ggplot2)
+packageVersion("ggplot2")
+dev_mode(F)
+library(tidyverse)
+
+theme_set(theme_bw())
+
+otu_colors <- brewer.pal(9, "YlGnBu")[c(6, 8)]
+med_color <- brewer.pal(9, "YlOrRd")[6]
+em_colors <- brewer.pal(9, "YlGn")[c(4, 6, 8)]
+method_colors <- c(otu_colors, med_color, em_colors)
+labels = paste(levels(all_table_gg$method), " ")
+
+
+total_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", bar_colors = method_colors, x_labels = dilution_labels) +
+  big_labels(legend.position = "bottom")
+total_tax_cols
+
+ref_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", "Reference", method_colors, dilution_labels, 
+                                psub = "Exact match to mock community sequence") +
+  big_labels(legend.position = "bottom")
+ref_tax_cols
+
+ref_noisy_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", "Ref Noisy", method_colors, dilution_labels,
+                                      psub = "1-10 nt off from Reference") +
+  big_labels(legend.position = "bottom")
+ref_noisy_tax_cols
+
+contam_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", "Contaminant", method_colors, dilution_labels,
+                                   psub = "Exact match to NT database") +
+  big_labels(legend.position = "bottom")
+contam_tax_cols
+
+contam_noisy_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", "Contam Noisy", method_colors, dilution_labels,
+                                         psub = "1-10 nt off from Contaminant") +
+  big_labels(legend.position = "bottom")
+contam_noisy_tax_cols
+
+other_tax_cols <- dodged_col_plot(taxa_summary_gg, "sample", "Other", method_colors, dilution_labels,
+                                  psub = "None of the above") +
+  big_labels(legend.position = "bottom")
+other_tax_cols
+
+
+unloadNamespace("tidyverse")
+unloadNamespace("ggplot2")
+library(ggplot2)
+packageVersion("ggplot2")
+library(tidyverse)
+
+```
+
+
+Plot counts of Contaminant, Contam_Noisy, and Other, at the taxon level, faceted by method, to show whether these categories exhibit the same trend or not.
+```{r non-reflike and reflike taxa lines}
+
+library(ggpubr)
+
+classes = levels(all_table_gg$class)
+class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
+class_colors <- brewer.pal(9, "Set1")[c(9, 5, 4, 1, 2)]
+class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
+
+non_reflike_tax_lines <- dilution_tax_line_plot(taxa_summary_gg, "class", 
+                                                c("Contaminant", "Contam Noisy", "Other"), "identity") +
+  scale_color_manual(name = "Taxonomic group class   ", values = class_colors[3:5], labels = paste(classes[3:5], "   ")) +
+  ylab("taxonomic groups") +
+  facet_wrap(~method) +
+  big_labels(title = 20, text = 18, legend.position = "top") +
+  theme(panel.spacing = unit(1.5, "lines"))
+non_reflike_tax_lines
+
+reflike_tax_lines <- dilution_tax_line_plot(taxa_summary_gg, "class", c("Reference", "Ref Noisy"), "identity") +
+  scale_color_manual(name = "Taxonomic group class   ", values = class_colors[1:2], labels = paste(classes[1:2], "   ")) +
+  ylab("taxonomic groups") +
+  facet_wrap(~method) +
+  big_labels(title = 20, text = 18, legend.position = "top") +
+  theme(panel.spacing = unit(1.5, "lines"))
+reflike_tax_lines
+
+ggarrange(reflike_tax_lines, non_reflike_tax_lines, labels = c("A", "B"), nrow = 2)
+
+```
+
 
 
 ```{r percent reference lines}
@@ -614,8 +764,8 @@ snr_box_all
 
 snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
   geom_boxplot(aes(x = sample, y = count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
-  labs(title = "Abundance distributions of Reference and non-Reference sequences",
-          subtitle = "", x = "dilution", y = "log10(abundance)") +
+  # labs(title = "Abundance distributions of Reference and non-Reference sequences", subtitle = "", 
+  labs(x = "dilution", y = "log10(abundance)") +
   scale_fill_manual(name = "Sequence type   ", 
                     labels = c("Reference   ", "non-Reference   "), 
                     values = c("blue", "orange")) +
@@ -705,8 +855,6 @@ mean_snr_line
 
 Create plot to show sample composition, colored by reference vs. non-reference.
 ```{r composition plot}
-
-library(RColorBrewer)
 
 mname = "UCLUST"
 
@@ -874,9 +1022,11 @@ class_seqs_comp <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
   scale_fill_manual(name = "Sequence class", values = rev(class_colors),
                     guide = guide_legend(reverse = F)) +
   scale_x_discrete(labels = dilution_labels) +
-  labs(title = "Composition of dilution series communities by sequence class", 
-       subtitle = "", x = "dilution", y = "sequences") +
-  big_labels(legend.position = "right")
+  # labs(title = "Composition of dilution series communities by sequence class", subtitle = "", 
+  labs(x = "dilution", y = "sequences") +
+  big_labels(title = 20, text = 18, legend.position = "right") +
+  theme(panel.spacing = unit(1.5, "lines")) +
+  guides(fill = guide_legend(override.aes = list(size = 4)))
 class_seqs_comp
 
 ```
@@ -893,12 +1043,13 @@ class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
 class_reads_comp_method <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
   geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.7) +
   scale_x_discrete(labels = dilution_labels) +
-  scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
+  scale_fill_manual(name = "Sequence class   ", values = rev(class_colors), labels = paste(rev(classes), "   "),
                     guide = guide_legend(reverse = TRUE)) +
   facet_wrap(~method, nrow = 2) +
-  labs(title = "Read-level composition by sequence class across dilution series",
-       subtitle = "", y = "relative abundance") +
-  big_labels(angle = 90, hjust = 1, vjust = 0.5, legend.position = "top")
+  # labs(title = "Read-level composition by sequence class across dilution series", subtitle = "", 
+  labs(y = "relative abundance") +
+  big_labels(angle = 90, hjust = 1, vjust = 0.5, legend.position = "top") +
+  theme(panel.spacing = unit(1.5, "lines"))
 class_reads_comp_method
 
 class_reads_comp_sample <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
@@ -1226,6 +1377,15 @@ method_tables.filt <- mapply(function(mf, mt) {
   ann_tab <- full_join(mf, ann_tab, by = "id")
   return(ann_tab)
 }, method_tables.filt, method_tables, SIMPLIFY = FALSE)
+
+```
+
+
+```{r pres plot}
+
+contam_lines <- ggplot(dilution_contam) +
+  geom_line(aes(x = sample, y = count, group = id, color = id))
+contam_lines
 
 ```
 

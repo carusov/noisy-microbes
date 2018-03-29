@@ -19,7 +19,7 @@ library(Biostrings)
 library(tidyverse)
 library(ShortRead)
 
-options(tibble.print_min = 40, tibble.print_max = 40)
+options(tibble.print_min = 100, tibble.print_max = 40)
 
 result_path <- "~/thesis/results/high_biomass"
 ref_path <- "~/thesis/references"
@@ -236,36 +236,60 @@ for (d in datasets){
 ```
 
 
-Compute a table of summaries for each method.
-```{r compute dataset summaries}
+Compute a table of sequence summaries for each method.
+```{r compute sequence summaries}
 
 
-dataset_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_strains,
-                         MoreArgs = list(sample_names = methods, max_dist = max_dist),
-                         SIMPLIFY = FALSE)
-dataset_summary <- lapply(dataset_summary, function(ds){
+dataset_seq_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_strains,
+                              MoreArgs = list(sample_names = methods, max_dist = max_dist),
+                              SIMPLIFY = FALSE)
+dataset_seq_summary <- lapply(dataset_summary, function(ds){
   colnames(ds)[1] <- "method"
   return(ds)
 })
-dataset_summary_short <- lapply(dataset_summary, function(ds){
-  return(ds %>% select(method, total, reference, ref_noisy, contaminant, contam_noisy, other))
-})
-dataset_summary_short <- lapply(dataset_summary_short, function(dss){
+dataset_summary <- lapply(dataset_seq_summary, sanity_check_summary)
+lapply(dataset_seq_summary, function(ds) sum(ds$total != ds$check_sum))
+
+
+dataset_summary_short <- lapply(dataset_seq_summary, function(ds){
+  dss <- ds %>% select(method, total, reference, ref_noisy, contaminant, contam_noisy, other)
   dss$method <- c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")
   return(dss)
 })
-# sample_summary <- method_to_sample(method_summary, "sample", "method")
 
-dataset_summary <- lapply(dataset_summary, sanity_check_summary)
-# sample_summary <- lapply(sample_summary, sanity_check_summary)
+write_tables(dataset_seq_summary, file.path(analysis_path, "dataset_seq_summary_tables.tsv"))
+write_tables(dataset_summary_short, file.path(analysis_path, "dataset_summary_short_tables.tsv"), compact = TRUE)
 
-lapply(dataset_summary, function(ds) sum(ds$total != ds$check_sum))
-# lapply(sample_summary, function(ss) sum(ss$total != ss$check_sum))
 
-write_tables(dataset_summary, file.path(analysis_path, "dataset_summary_tables.tsv"))
-# write_tables(sample_summary, file.path(analysis_path, "sample_summary_tables.tsv"))
-write_tables(dataset_summary_short, file.path(analysis_path, "dataset_summary_short_tables.tsv"))
+```
 
+
+Assign taxonomy to the sequences.
+```{r assign taxonomy}
+
+genus_db <- "silva_nr_v132_train_set.fa.gz"
+species_db <- "silva_species_assignment_v132.fa.gz"
+taxa <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+dataset_tables <- lapply(dataset_tables, assign_taxonomy, 
+                         genus_db_path = file.path(ref_path, genus_db), 
+                         species_db_path = file.path(ref_path, species_db))
+
+```
+
+
+Now, compute summary tables at the taxonomy level
+```{r compute taxonomy summaries}
+
+dataset_taxa_summary <- lapply(dataset_tables, summarize_taxa, sample_names = methods, group = method)
+dataset_taxa_summary <- lapply(dataset_taxa_summary, function(dts){
+  dts$method <- factor(dts$method,
+                       levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+                       labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+  dts <- dts %>% arrange(method)
+  return(dts)
+})
+write_tables(dataset_taxa_summary, file.path(analysis_path, "dataset_taxa_summary_tables.tsv"), compact = TRUE)
 
 ```
 
@@ -295,8 +319,7 @@ Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
 
 # Combine all method tables into one large table, then gather the sample columns into a single column
-dataset_tables_gg <- lapply(dataset_tables, gather_samples, methods, "method")
-# dataset_tables_gg <- lapply(dataset_tables_gg, annotate_norms, group = "sample")
+dataset_tables_gg <- lapply(dataset_tables, gather_samples, methods, method)
 all_table_gg <- do.call("rbind", dataset_tables_gg) %>% mutate(dataset = rep(datasets, times = sapply(dataset_tables_gg, nrow)))
 all_table_gg$dataset <- factor(all_table_gg$dataset, levels = c("zymo", "kozich", "schirmer", "damore"),
                               labels = c("Zymo", "Kozich", "Schirmer", "D'Amore"))
@@ -365,6 +388,8 @@ Create plots to show relative strength of signal (reference sequence matches) to
 
 library(ggbeeswarm)
 library(scales)
+library(cowplot)
+library(gridExtra)
 
 dname = "Schirmer"
 
@@ -409,18 +434,31 @@ snr_bees <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0),
 snr_bees
 
 snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
-  geom_boxplot(aes(x = method, y = count, fill = factor(reference, levels = c(TRUE, FALSE)))) +
+  # geom_boxplot(aes(x = method, y = count, color = factor(reference, levels = c(TRUE, FALSE)))) +
+  geom_boxplot(aes(x = method, y = count, fill = factor(reference, levels = c(TRUE, FALSE))),
+               color = "black", show.legend = T) +
   # labs(title = "Abundance distributions of Reference and non-Reference sequences",
   #         subtitle = "", x = "method", y = "log10(abundance)") +
-  labs(x = "method", y = "log10(abundance)") +
+  labs(x = "method", y = expression(bold("log"[10]*" abundance"))) +
   scale_fill_manual(name = "Sequence type   ", 
-                    labels = paste(c("Reference", "non-Reference"), "   "), 
+                    labels = paste(c(" Reference", " non-Reference"), "   "), 
                     values = c("blue", "orange")) +
+  scale_color_manual(name = "Sequence type   ", 
+                    labels = paste(c(" Reference", " non-Reference"), "   "), 
+                    values = c("blue", "orange")) +  
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))) +
   facet_wrap(~dataset) +
-  big_labels(legend.position = "top")
+  big_labels(title = 24, text = 20, legend.position = "top") +
+  theme(panel.spacing = unit(1.5, "lines")) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
 snr_box_facet
+
+box_legend <- get_legend(snr_box_facet)
+box_legend <- plot_grid(box_legend, ncol = 1)
+box_legend
+
+grid.arrange(snr_box_facet, box_legend, ncol = 1)
 
 snr_bees_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
   geom_beeswarm(aes(x = method, y = log10_count, color = factor(reference, levels = c(T, F))), size = 2, cex = 0.05, dodge.width = 0.3) +
@@ -460,15 +498,15 @@ set.seed(444)
 
 dname = "D'Amore"
 
-ref_colors <- brewer.pal(sum(all_table$reference), "Dark2")
-other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!all_table$reference), replace = TRUE)
+ref_colors <- brewer.pal(sum(dataset_tables$zymo$reference), "Dark2")
+other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!dataset_tables$zymo$reference), replace = TRUE)
 
-all_table$color <- rep(NA, nrow(all_table))
-all_table$color[all_table$reference] <- ref_colors
-all_table$color[!all_table$reference] <- other_colors
+dataset_tables$zymo$color <- rep(NA, nrow(dataset_tables$zymo))
+dataset_tables$zymo$color[dataset_tables$zymo$reference] <- ref_colors
+dataset_tables$zymo$color[!dataset_tables$zymo$reference] <- other_colors
 
 
-color_gg <- all_table %>% select(id, methods, color) %>% gather("method", "count", methods)
+color_gg <- dataset_tables$zymo %>% select(id, methods, color) %>% gather("method", "count", methods)
 legend_color <- c(bright = ref_colors[2], dull = other_colors[2])
 all_table_gg <- inner_join(all_table_gg, color_gg)
 
