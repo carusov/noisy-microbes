@@ -482,6 +482,25 @@ annotate_class <- function(seq_table){
 }
 
 
+# function to assign taxonomy to sequences and add taxonomic labels to the sequence table
+assign_taxonomy <- function(seq_table, genus_db_path, species_db_path){
+  seqs <- seq_table[["sequence"]]
+  taxa <- assignTaxonomy(seqs, refFasta = genus_db_path, multithread = TRUE, verbose = TRUE)
+  taxa <- taxa %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as.tibble()
+  species <- assignSpecies(seqs, refFasta = species_db_path, verbose = TRUE)
+  species <- species %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as.tibble()
+  
+  taxa <- inner_join(taxa, species, by = "sequence")
+  taxa <- taxa %>% mutate(Genus = ifelse(!is.na(Genus.x), Genus.x, Genus.y)) %>%
+    mutate(Genus = ifelse(str_detect(Genus, Genus.y) & !is.na(Genus.y), Genus.y, Genus)) %>%
+    select(-Genus.x, -Genus.y)
+  taxa$taxonomy <- taxa %>% select(Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
+    apply(., 1, paste, collapse = " ")
+  new_table <- inner_join(seq_table, taxa, by = "sequence")
+  return(new_table)
+}
+
+
 # function to count the number of strains' sequences that match inferred sequences
 count_strains <- function(seq_vector, strain_dist){
   seqs_to_strains <- apply(strain_dist[seq_vector > 0, ], 2, min)
@@ -490,7 +509,7 @@ count_strains <- function(seq_vector, strain_dist){
 }
 
 
-# function to create a summary table from a sequence table
+# function to create a sequence summary table from a sequence table
 summarize_seqs <- function(seq_table, dist_mat, strains, sample_names, max_dist){
   # summarize counts of various classes
   exp_strains <- rep(length(unique(strains)), length(sample_names))
@@ -528,6 +547,38 @@ summarize_seqs <- function(seq_table, dist_mat, strains, sample_names, max_dist)
 }
 
 
+# function to gather sample counts into a single column
+gather_samples <- function(seq_table, sample_names, sample_colname){
+  sample_colname <- enquo(sample_colname)
+  gg_table <- gather(seq_table, !!sample_colname, "count", one_of(sample_names)) %>%
+    select(id, !!sample_colname, count, everything())
+  return(gg_table)
+}
+
+
+# function to create a taxa summary table from a sequence table
+summarize_taxa <- function(seq_table, sample_names, group){
+  group <- enquo(group)
+  seq_table_gg <- gather_samples(seq_table , sample_names, !!group)
+  # seq_table_gg$method <- factor(seq_table_gg$method, 
+  #                               levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+  #                               labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+  taxa_summary <- seq_table_gg %>% 
+    group_by(!!group, class) %>% 
+    filter(count > 0) %>% 
+    summarise(n_taxa = length(unique(taxonomy))) %>%
+    complete(class, fill = list(n_taxa = 0)) %>% ungroup()
+  taxa_summary <- spread(taxa_summary, class, n_taxa)
+  totals <- seq_table_gg %>% 
+    group_by(!!group) %>%
+    filter(count > 0) %>%
+    summarise(n_taxa = length(unique(taxonomy)))
+  taxa_summary <- bind_cols(Total = totals$n_taxa, taxa_summary) %>%
+    select(!!group, everything())
+  return(taxa_summary)
+}
+
+
 # function to add a sanity check to the summary table
 sanity_check_summary <- function(sum_table){
   sum_table <- sum_table %>% 
@@ -539,28 +590,49 @@ sanity_check_summary <- function(sum_table){
 
 
 # function to convert list of method summaries to list of sample summaries
-method_to_sample <- function(method_table_list, mt_colname, st_colname){
-  sample_names <- method_table_list[[1]][[mt_colname]]
-  sample_summary <- sapply(sample_names, function(m) NULL)
+# method_to_sample <- function(method_table_list, mt_colname, st_colname){
+#   sample_names <- method_table_list[[1]][[mt_colname]]
+#   sample_summary <- sapply(sample_names, function(m) NULL)
+#   
+#   sample_summary <- mapply(function(ssum, sname, msum){
+#     ssum <- lapply(msum, function(ms, ss, sn) {
+#       ss <- rbind(ss, ms[ms[[mt_colname]] == sn, ])
+#       return(ss)
+#     }, ss = ssum, sn = sname)
+#     
+#     ssum <- do.call("rbind", ssum) %>% rownames_to_column(var = st_colname)
+#     ssum <- ssum %>% select(-one_of(mt_colname))
+#     return(ssum)
+#   }, ssum = sample_summary, sname = sample_names, MoreArgs = list(msum = method_table_list), 
+#   SIMPLIFY = FALSE)
+#  
+#   return(sample_summary) 
+# }
+
+
+# function to convert list of tables list by one variable to a list of tables listed by a different variable
+transpose_table_list <- function(old_list, old_id_col, new_id_col){
+  new_list_names <- as.character(old_list[[1]][[old_id_col]])
+  new_row_ids <- names(old_list)
+  new_list <- list()
   
-  sample_summary <- mapply(function(ssum, sname, msum){
-    ssum <- lapply(msum, function(ms, ss, sn) {
-      ss <- rbind(ss, ms[ms[[mt_colname]] == sn, ])
-      return(ss)
-    }, ss = ssum, sn = sname)
-    
-    ssum <- do.call("rbind", ssum) %>% rownames_to_column(var = st_colname)
-    ssum <- ssum %>% select(-one_of(mt_colname))
-    return(ssum)
-  }, ssum = sample_summary, sname = sample_names, MoreArgs = list(msum = method_table_list), 
-  SIMPLIFY = FALSE)
- 
-  return(sample_summary) 
+  for (nn in new_list_names){
+    new_table <- data.frame()
+    for (nid in new_row_ids){
+      temp <- old_list[[nid]]
+      new_row <- data.frame(nid, temp[temp[old_id_col] == nn, ], check.names = FALSE)
+      new_table <- rbind(new_table, new_row)
+    }
+    colnames(new_table)[1] <- new_id_col
+    new_table <- new_table %>% select(-one_of(old_id_col)) %>% as.tibble()
+    new_list[[nn]] <- new_table
+  }
+  return(new_list)
 }
 
 
 # function to write a list of tables to a single file
-write_tables <- function(table_list, file_path, overwrite = TRUE){
+write_tables <- function(table_list, file_path, compact = FALSE, overwrite = TRUE){
   if (file.exists(file_path) & overwrite == FALSE){
     cat("File", file_path, "exists, I will not overwrite it.\n")
     return(FALSE)
@@ -569,11 +641,13 @@ write_tables <- function(table_list, file_path, overwrite = TRUE){
   }
   
   header = paste(colnames(table_list[[1]]), collapse = "\t")
-  write(header, file_path, append = TRUE)
+  if (compact) write(header, file_path, append = TRUE)
   tab_names <- names(table_list)
   for (i in seq_along(table_list)){
-    # write(c("\n", tab_names[i]), file_path, append = TRUE)
-    # write(header, file_path, append = TRUE)
+    if (!compact){
+      write(c("\n", tab_names[i]), file_path, append = TRUE)
+      write(header, file_path, append = TRUE)
+    }
     write_tsv(table_list[[i]], file_path, append = TRUE)
   }
   
@@ -628,14 +702,6 @@ compute_ref_perc <- function(seq_tab, sample_names){
 }
 
 
-# function to gather sample counts into a single column
-gather_samples <- function(seq_table, sample_names, sample_colname){
-  gg_table <- gather(seq_table, !!sample_colname, "count", one_of(sample_names)) %>%
-    select(id, !!sample_colname, count, everything())
-  return(gg_table)
-}
-
-
 # function to annotate normalized sequence counts
 annotate_norms <- function(all_seq_table, group){
   all_seq_table <- all_seq_table %>%
@@ -664,17 +730,17 @@ annotate_norms <- function(all_seq_table, group){
 theme_set(theme_bw())
 
 # function to define general theme parameters
-big_labels <- function(angle = 45, hjust = 1, vjust = 1, legend.position = "bottom", key.size = 1){
-  theme(axis.text.x = element_text(size = 14, angle = angle, hjust = hjust, vjust = vjust),
-        axis.text.y = element_text(size = 14),
-        plot.title = element_text(face = "bold", size = 20, hjust = 0.5),
-        plot.subtitle = element_text(size = 16, hjust = 0.5),
-        axis.title = element_text(face = "bold", size = 16),
-        strip.text = element_text(size = 16),
+big_labels <- function(title = 16, text = 14, angle = 45, hjust = 1, vjust = 1, legend.position = "bottom", key.size = 1){
+  theme(axis.text.x = element_text(size = text, angle = angle, hjust = hjust, vjust = vjust),
+        axis.text.y = element_text(size = text),
+        plot.title = element_text(face = "bold", size = title, hjust = 0.5),
+        plot.subtitle = element_text(size = title - 2, hjust = 0.5),
+        axis.title = element_text(face = "bold", size = title),
+        strip.text = element_text(size = title),
         legend.position = legend.position,
         legend.justification = 0.5,
-        legend.title = element_text(face = "bold", size = 16),
-        legend.text = element_text(size = 16, hjust = 1),
+        legend.title = element_text(face = "bold", size = title),
+        legend.text = element_text(size = title - 2, hjust = 1),
         # legend.spacing.x = unit(1.5,"cm"),
         legend.key.size = unit(key.size, "lines")) 
 }
@@ -708,10 +774,8 @@ dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_la
   labels <- paste(levels(gg_table$method), "   ")
   
   seq_bars <- ggplot(gg_data, aes_string(x = x_axis)) +
-    # geom_bar(aes(fill = factor(method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"))), 
     geom_bar(aes(fill = method), 
              width = 0.8, position = position_dodge(preserve = "single")) +
-    # scale_fill_brewer(name = "Class", type = "qual", palette = 3) +
     scale_fill_manual(name = "Method   ", values = bar_colors, labels = labels) +
     scale_x_discrete(labels = x_labels) +
     labs(title = ptitle, 
@@ -725,11 +789,36 @@ dodged_bar_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_la
           legend.justification = 0.5,
           legend.title = element_text(face = "bold", size = 16),
           legend.text = element_text(size = 16, hjust = 1),
-          # legend.spacing.x = unit(1.5,"cm"),
           legend.key.size = unit(1, "lines")) +
     guides(fill = guide_legend(nrow = 1))
   return(seq_bars)
 }
+
+
+# create dodged column plot of taxa counts for a given label
+dodged_col_plot <- function(gg_table, x_axis, seq_label = NULL, bar_colors, x_labels, psub = NULL){
+  if (is.null(seq_label)){
+    ptitle <- "Total inferred taxa"
+    gg_data <- gg_table
+  }
+  else {
+    gg_data <- gg_table %>% filter(class == seq_label)
+    ptitle <- paste(seq_label, "taxa")
+  }
+  
+  labels <- paste(levels(gg_table$method), "   ")
+  
+  tax_cols <- ggplot(gg_data, aes_string(x = x_axis)) +
+    geom_col(aes(y = taxa, fill = method), 
+             width = 0.8, position = "dodge") +
+    scale_fill_manual(name = "Method   ", values = bar_colors, labels = labels) +
+    # scale_x_discrete(labels = x_labels) +
+    labs(title = ptitle, 
+         subtitle = psub, x = "dilution", y = "taxa") +
+    guides(fill = guide_legend(nrow = 1))
+  return(tax_cols)
+}
+
 
 # stacked bar plots of read counts in each class for each method
 class_comp_plot <- function(gg_table, bar_colors){
@@ -744,13 +833,27 @@ class_comp_plot <- function(gg_table, bar_colors){
 }
 
 
-# plot lines across dilution series
+# plot sequence lines across dilution series
 dilution_line_plot <- function(gg_table, group_var, filter_var = NULL, stat, size = 0.5){
   filter_var <- enquo(filter_var)
 
   ggplot(gg_table %>% filter(!! filter_var, count > 0), aes(x = sample)) +
     geom_line(aes_string(group = group_var, color = group_var), stat = stat, size = size) +
     geom_point(aes_string(color = group_var), stat = stat, size = 2 * size) +
+    scale_x_discrete(labels = dilution_labels) +
+    xlab("dilution")
+}
+
+
+# plot taxon lines across dilution series
+dilution_tax_line_plot <- function(gg_table, group_var, class_var = NULL, stat, size = 0.5){
+  if (!is.null(class_var)){
+    gg_table <- gg_table %>% filter(class %in% class_var)
+  }
+
+  ggplot(gg_table, aes(x = sample)) +
+    geom_line(aes_string(group = group_var, color = group_var, y = "taxa"), stat = stat, size = size) +
+    geom_point(aes_string(color = group_var, y = "taxa"), stat = stat, size = 2 * size) +
     scale_x_discrete(labels = dilution_labels) +
     xlab("dilution")
 }
