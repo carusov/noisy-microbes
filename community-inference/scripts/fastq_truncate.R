@@ -31,7 +31,7 @@ library("stringr")
 
 ## ----rename files--------------------------------------------------------
 
-#data_path <- "~/thesis/data/zymo_neat"
+data_path <- "~/thesis/data/zymo_neat"
 data_path <- opt$data
 raw_path <- file.path(data_path, "raw")
 
@@ -53,15 +53,18 @@ if (str_detect(fastqs[1], "^lane1-")){
 }
 
 
+
 ## ------------------------------------------------------------------------
 
-file_names <- list.files(raw_path)
-fastqs <- str_subset(file_names, ".fastq$")
+#file_names <- list.files(raw_path)
+#fastqs <- str_subset(file_names, ".fastq$")
 fastq_Fs <- str_subset(fastqs, "_R1")
 fastq_Rs <- str_subset(fastqs, "_R2")
 
 #get the sample names
 sample_names <- sapply(str_split(fastq_Fs, "_R\\d"), `[`, 1)
+# replace '-' with '.' in sample names
+sample_names <- str_replace_all(sample_names, "-", "\\.")
 
 qual_path <- file.path(raw_path, "quality")
 if (!file_test("-d", qual_path)) dir.create(qual_path)
