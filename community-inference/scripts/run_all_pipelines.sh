@@ -11,14 +11,19 @@
 
 # Set the default input, output, and reference directories
 #INDIR=~/thesis/data/dilution
-#OUTDIR=~/thesis/results/dilution
+OUTDIR=results
 REFDIR=~/thesis/references
 
 # Set default sequence length and filtering parameters
-MIN_LEN=220
+MIN_LEN=221
 MAX_LEN=225
 FTRUNC=230
 RTRUNC=210
+MAXEE_F=2.5
+MAXEE_R=2.5
+
+# Set the default processing mode
+MODE="pooled"
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -57,11 +62,18 @@ do
 	    MODE="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: run_all_pipelines.sh [-i input_directory]\n"
-	    printf "\t\t\t [-o output_directory] [-r reference_directory]\n"
-	    printf "\t\t\t [-f fwd_trunc_pos] [-b rev_trunc_pos]\n"
-	    printf "\t\t\t [-s min_merge_length] [-l max_merge_length]\n"
-	    printf "\t\t\t [-m mode]\n\n"
+	    printf "\nUSAGE: run_all_pipelines.sh [-i --input input_directory] [options]\n"
+	    printf "\nOptions: \t[default]"
+	    printf "\n-o --output \t[./"$OUTDIR"] \t\t\t\toutput_directory"
+	    printf "\n-r --ref \t["$REFDIR"] \treference_directory"
+	    printf "\n-f --ftrunc \t["$FTRUNC"] \t\t\t\t\tforward_trunc_position"
+	    printf "\n-b --rtrunc \t["$RTRUNC"] \t\t\t\t\treverse_trunc_position"
+	    printf "\n-s --min_len \t["$MIN_LEN"] \t\t\t\t\tmin_merge_length"
+	    printf "\n-l --max_len \t["$MAX_LEN"] \t\t\t\t\tmax_merge_length"
+	    printf "\n-F --maxee_F \t["$MAXEE_F"] \t\t\t\t\tmax_ee_forward"
+	    printf "\n-R --maxee_R \t["$MAXEE_R"] \t\t\t\t\tmax_ee_reverse"
+	    printf "\n-m --mode \t["$MODE"] \t\t\t\tprocessing mode"
+	    printf "\n\n"
 	    exit;;
 	*)
 
@@ -70,38 +82,43 @@ do
     shift
 done
 
+
+# Create the output directory, if necessary
+if [ ! -d "$OUTDIR" ]; then
+    mkdir -p $OUTDIR
+fi
+
 # Convert any relative paths to absolute paths
 INDIR=$(readlink -f "$INDIR")
 OUTDIR=$(readlink -f "$OUTDIR")
 REFDIR=$(readlink -f "$REFDIR")
 
-printf "\nINPUT DIRECTORY = "${INDIR}""
-printf "\nOUTPUT DIRECTORY = "${OUTDIR}""
-printf "\nREFERENCE DIRECTORY = "${REFDIR}""
+printf "\nINPUT DIRECTORY: %s" "$INDIR"
+printf "\nOUTPUT DIRECTORY: %s" "$OUTDIR"
+printf "\nREFERENCE DIRECTORY: %s" "$REFDIR"
 printf "\nMinimum merge length: %d" $MIN_LEN
 printf "\nMaximum merge length: %d" $MAX_LEN
 printf "\nMaximum expected errors (DADA2 forward): %0.2f" $MAXEE_F
 printf "\nMaximum expected errors (DADA2 reverse): %0.2f" $MAXEE_R
-printf "\nProcessing mode: "${MODE}""
+printf "\nProcessing mode: %s" "$MODE"
+printf "\n\n"
 
-
-# Create the output directory, if necessary
-if [ ! -d "$OUTDIR" ]; then
-    mkdir $OUTDIR
-fi
 
 # If pooled mode is selected, run five pipelines on the pooled fasta file
-if [[ "$MODE" == pooled ]]; then
-    run_5_pipelines.sh -q "$INDIR"/filtered/pooled_filtered.fastq \
-		       -a "$INDIR"/filtered/pooled_filtered.fasta \
+if [[ $MODE == pooled ]]
+then
+    run_5_pipelines.sh -q "$INDIR"/filtered/pooled/pooled_filtered.fastq \
+		       -a "$INDIR"/filtered/pooled/pooled_filtered.fasta \
 		       -o "$OUTDIR" \
-		       -r "$INDIR"/merged/pooled_merged.fastq \
+		       -g "$INDIR"/filtered/mothur.groups \
+		       -r "$INDIR"/merged/pooled/pooled_merged.fastq \
 		       -R "$REFDIR" \
 		       -t $MIN_LEN
 
 # If separate mode is selected, run five pipelines on each sample fasta separately
-elif [[ "$MODE" == separate ]]; then
-    for s in $(ls "$INDIR"/filtered | egrep '^s[0-9]{3}.*\.fastq');
+elif [[ $MODE == separate ]]
+then
+    for s in $(ls "$INDIR"/filtered/separate | egrep '^s[0-9]{3}.*\.fastq');
     do
 	fname="${s%.fastq}"
 	sname="${s%_*.fastq}"
@@ -109,9 +126,10 @@ elif [[ "$MODE" == separate ]]; then
 	fasta="$fname".fasta
 	raw="$sname"_merged.fastq
 
-	run_5_pipelines.sh -q "$INDIR"/filtered/"$fastq" \
-			   -a "$INDIR"/filtered/"$fasta" \
+	run_5_pipelines.sh -q "$INDIR"/filtered/separate/"$fastq" \
+			   -a "$INDIR"/filtered/separate/"$fasta" \
 			   -o "$OUTDIR"/"$sname" \
+			   -g "$INDIR"/filtered/mothur.groups \
 			   -r "$INDIR"/merged/"$raw" \
 			   -R "$REFDIR" \
 			   -t $MIN_LEN
@@ -129,7 +147,7 @@ fi
 
 # Run the DADA2 pipeline with defaults (DADA2 always processes samples separately)
 # First, make sure we have the latest version of the script
-SCRIPTS=~/thesis/noisy-microbes/scripts
+SCRIPTS=~/thesis/noisy-microbes/community-inference/scripts
 pushd $SCRIPTS
 rmd2r.R -i dada2_pipeline.Rmd
 popd

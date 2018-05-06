@@ -31,6 +31,9 @@ do
 	-r|--raw_file)
 	    RAWFILE="$2"
 	    shift;;
+	-g|--groups)
+	    GROUP="$2"
+	    shift;;
 	-R|--ref)
 	    REFDIR="$2"
 	    shift;;
@@ -41,6 +44,7 @@ do
 	    printf "\nUSAGE: run_5_pipelines.sh [-q fastq_input_file]\n"
 	    printf "\t\t\t [-a fastq_input_file]\n"
 	    printf "\t\t\t [-o output_directory] [-r raw_file]\n"
+	    printf "\t\t\t [-g mothur_group_file]\n"
 	    printf "\t\t\t [-R reference_directory] [-t trim_length]\n\n"
 	    exit;;
 	*)
@@ -54,6 +58,7 @@ done
 FASTQ=$(readlink -f "$FASTQ")
 FASTA=$(readlink -f "$FASTA")
 OUTDIR=$(readlink -f "$OUTDIR")
+GROUP=$(readlink -f "$GROUP")
 RAWFILE=$(readlink -f "$RAWFILE")
 REFDIR=$(readlink -f "$REFDIR")
 
@@ -61,6 +66,7 @@ printf "\nFASTQ FILE = "${FASTQ}""
 printf "\nFASTA FILE = "${FASTA}""
 printf "\nRAW FILE = "${RAWFILE}""
 printf "\nOUTPUT DIRECTORY = "${OUTDIR}""
+printf "\nMOTHUR GROUP FILE: %s" "$GROUP"
 printf "\nREFERENCE DIRECTORY = "${REFDIR}""
 printf "\nDeblur trim length: %d\n" $TRIM_LEN
 
@@ -108,3 +114,11 @@ printf "\n######################################################################
 deblur_pipeline.sh -i "$FASTA" \
 		   -o "$OUTDIR"/deblur \
 		   -t $TRIM_LEN
+
+# Run the mothur pipeline
+printf "\n######################################################################\n"
+printf "\nRunning the mothur pipeline...\n"
+printf "\n######################################################################\n"
+mothur_pipeline.sh -i "$FASTA" \
+		   -o "$OUTDIR"/mothur \
+		   -g "$GROUP"
