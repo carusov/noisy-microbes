@@ -6,8 +6,8 @@
 ### (see www.qiime.org for detailed documentation)
 
 # Set the default input file, output directory, and 16S reference db
-INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/thesis/results/dilution/uclust
+#INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
+OUTDIR=uclust
 REF_FILE=~/thesis/references/gold.fa
 
 # Parse command-line options
@@ -35,13 +35,19 @@ do
     shift
 done
 
-printf "\nINPUT FILE = ""${INFILE}""\n"
-printf "OUTPUT DIRECTORY = ""${OUTDIR}""\n\n"
-
 # Create the output directory, if necessary
 if [ ! -d "$OUTDIR" ]; then
     mkdir $OUTDIR
 fi
+
+INFILE=$(readlink -f "$INFILE")
+OUTDIR=$(readlink -f "$OUTDIR")
+REF_FILE=$(readlink -f "$REF_FILE")
+
+printf "\nINPUT FILE: \t%s" "$INFILE"
+printf "\nOUTPUT DIRECTORY: %s" "$OUTDIR"
+printf "\nREFERENCE DB: \t%s" "$REF_FILE"
+printf "\n\n"
 
 # Activate the qiime environment in miniconda
 source activate qiime1

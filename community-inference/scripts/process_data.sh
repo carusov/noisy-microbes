@@ -26,7 +26,8 @@ merge_and_filter.sh -w $DATA/zymo_neat \
 run_all_pipelines.sh -i $DATA/zymo_neat -o $RESULTS/zymo_neat \
 		     -f 230 -b 210 \
 		     -s 221 -l 225 \
-		     -F 2.5 -R 2.5
+		     -F 2.5 -R 2.5 \
+		     -m separate
 # DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
 
 
@@ -87,23 +88,6 @@ run_all_pipelines.sh -i $DATA/damore_uneven -o $RESULTS/damore_uneven \
 # DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
 
 
-# Process dataset metaID-88 from D'Amore, et al.
-#printf "\n**********************************************************************"
-#printf "\n**********************************************************************\n"
-#printf "\nProcessing D'Amore balanced sample...\n"
-#printf "\n**********************************************************************"
-#printf "\n**********************************************************************\n"
-#merge_and_filter.sh -w $DATA/damore_balanced \
-#		    -f 250 -b 240 \
-#		    -s 261 -l 261 \
-#		    -d $MAXDIFFS  \
-#		    -e $MAXEE -n $MAXN
-
-#run_all_pipelines.sh -i $DATA/damore_balanced -o $RESULTS/damore_balanced \
-#		     -f 250 -b 240 \
-#		     -s 261 -l 261
-
-
 # Process dilution series without extraction blank, with pooled samples
 printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
@@ -123,7 +107,7 @@ run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution_pooled \
 		     -m pooled
 # DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
 
-# Process dilution series without extraction blank, with pooled samples
+# Process dilution series without extraction blank, with separate samples
 printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 printf "\nProcessing Zymo dilution series (without blank), with separated samples...\n"

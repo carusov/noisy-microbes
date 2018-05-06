@@ -26,7 +26,8 @@ do
 	    TRIM="$2"
 	    shift;;
 	-h|--help)
-	    printf "\nUSAGE: deblur_pipeline.sh -i input_file -o output_directory\n\n"
+	    printf "\nUSAGE: deblur_pipeline.sh -i input_file -o output_directory"
+	    printf "\n\t-t trim_length\n\n"
 	    exit;;
 	*)
 
