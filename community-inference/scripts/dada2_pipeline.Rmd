@@ -30,9 +30,9 @@ library(optparse)
  
 option_list = list(
   make_option(c("-i", "--input"), type = "character", default = NULL, 
-              help = "data directory", metavar = NULL),
+              help = "input directory", metavar = NULL),
   make_option(c("-o", "--output"), type = "character", default = NULL,
-              help = "results directory", metavar = NULL),
+              help = "output directory", metavar = NULL),
   # make_option(c("-f", "--ftrunc"), type = "integer", default = 230,
   #             help = "forward read truncate position"),
   # make_option(c("-b", "--rtrunc"), type = "integer", default = 210,
@@ -44,7 +44,9 @@ option_list = list(
   make_option(c("-F", "--maxee_F"), type = "numeric", default = 2.5,
               help = "max EE forward reads"),
   make_option(c("-R", "--maxee_R"), type = "numeric", default = 2.5,
-              help = "max EE reverse reads")
+              help = "max EE reverse reads"),
+  make_option(c("-p", "--pooled"), action = "store_true", type = "logical", 
+              default = FALSE, help = "pool samples for inference")
 )
  
 opt_parser = OptionParser(option_list=option_list)
@@ -142,8 +144,8 @@ derep_Rs <- derepFastq(file.path(filt_path, filt_Rs), verbose = TRUE)
 Since I used all the read data to learn the error rates, the sequence inference for all samples has already been done by DADA2. However, I'll do the inference again formally here, for consistency, using the learned error rates.
 ```{r SV inference}
 
-dada_Fs <- dada(derep_Fs, err = err_F, multithread = TRUE)
-dada_Rs <- dada(derep_Rs, err = err_R, multithread = TRUE)
+dada_Fs <- dada(derep_Fs, err = err_F, multithread = TRUE, pool = opt$pooled)
+dada_Rs <- dada(derep_Rs, err = err_R, multithread = TRUE, pool = opt$pooled)
 
 # Save the dada objects
 save(err_F, err_R, derep_Fs, derep_Rs, dada_Fs, dada_Rs, file = file.path(dada2_path, "dada2.RData"))
