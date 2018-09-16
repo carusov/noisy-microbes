@@ -66,6 +66,10 @@ usearch -otutab $RAW_MERGED_FILE \
 	-notmatchedfq $OUTDIR/unmapped_reads.fastq \
 	-sizeout
 
+
+### The remaining commands are an auxiliary analysis that was not used
+### in the manuscript
+
 # Find out how many reads didn't map to OTUs
 usearch -fastx_info $OUTDIR/unmapped_reads.fastq \
 	-output $OUTDIR/unmapped_reads_info.txt
