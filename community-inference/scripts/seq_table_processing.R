@@ -21,8 +21,12 @@ load_uclust <- function(otu_file_path, seq_file_path, sample_names = NULL){
   if (is.null(sample_names)){
     sample_names <- colnames(uclust_table)[-1]  
     sample_names <- sample_names[order(sample_names)]
+    uclust_table <- uclust_table %>% select(id, sample_names)  # put columns in order of sample names
+  } else {
+    tmp_names <- colnames(uparse_table)[-1][order(colnames(uparse_table)[-1])]  
+    uparse_table <- uparse_table %>% select(id, tmp_names)  # put sample columns in order
+    colnames(uparse_table)[-1] <- sample_names  # rename columns with provided sample names
   }
-  uclust_table <- uclust_table %>% select(id, sample_names)  # put columns in order of sample names
   
   # get sequences and add them to the table
   uclust_seqs <- readDNAStringSet(seq_file_path)
@@ -59,6 +63,33 @@ load_uparse <- function(otu_file_path, seq_file_path, sample_names = NULL){
   return(uparse_table)
 }
 
+
+# function to load mothur OTU table
+load_mothur <- function(otu_file_path, seq_file_path, sample_names = NULL){
+  mothur_table <- read.table(file = otu_file_path, header = TRUE, sep = "\t", 
+                                       comment.char = "")
+  tmp_names <- mothur_table[[2]][order(mothur_table[2])]
+  mothur_table <- data.frame(t(mothur_table[, -c(1:3)]))
+  mothur_table <- as.tibble(rownames_to_column(mothur_table, var = "id"))
+  colnames(mothur_table)[-1] <- tmp_names
+  
+  if (is.null(sample_names)){
+    sample_names <- tmp_names
+    mothur_table <- mothur_table %>% select(id, sample_names)  # put columns in order of sample names
+  } else {
+    tmp_names <- colnames(mothur_table)[-1][order(colnames(mothur_table)[-1])]  
+    mothur_table <- mothur_table %>% select(id, tmp_names)  # put sample columns in order
+    colnames(mothur_table)[-1] <- sample_names  # rename columns with provided sample names
+  }
+  
+  # get sequences and add them to the table
+  mothur_seqs <- readDNAStringSet(seq_file_path)
+  mothur_seqs <- as.character(mothur_seqs)
+  mothur_table$sequence <- mothur_seqs[mothur_table$id]  # add sequences to table
+  mothur_table$id <- str_replace(mothur_table$id, "Otu", "Otu_")
+  
+  return(mothur_table)
+}
 
 # function to load UNOISE ZOTU table
 load_unoise <- function(otu_file_path, seq_file_path, sample_names = NULL){
@@ -610,7 +641,7 @@ sanity_check_summary <- function(sum_table){
 # }
 
 
-# function to convert list of tables list by one variable to a list of tables listed by a different variable
+# function to convert list of tables listed by one variable to a list of tables listed by a different variable
 transpose_table_list <- function(old_list, old_id_col, new_id_col){
   new_list_names <- as.character(old_list[[1]][[old_id_col]])
   new_row_ids <- names(old_list)
@@ -711,7 +742,7 @@ annotate_norms <- function(all_seq_table, group){
            rel_count = count / total_reads) %>% 
     ungroup()
 
-  if (group == "sample"){
+  if (identical(group, "sample")){
     all_seq_table <- all_seq_table %>%
       mutate(norm_median = round(rel_count * median(total_reads)),
              log10_norm_med = log10(norm_median))
@@ -733,6 +764,7 @@ theme_set(theme_bw())
 big_labels <- function(title = 16, text = 14, angle = 45, hjust = 1, vjust = 1, legend.position = "bottom", key.size = 1){
   theme(axis.text.x = element_text(size = text, angle = angle, hjust = hjust, vjust = vjust),
         axis.text.y = element_text(size = text),
+        axis.title.y = element_text(margin = margin(r = 40)),
         plot.title = element_text(face = "bold", size = title, hjust = 0.5),
         plot.subtitle = element_text(size = title - 2, hjust = 0.5),
         axis.title = element_text(face = "bold", size = title),
@@ -742,7 +774,8 @@ big_labels <- function(title = 16, text = 14, angle = 45, hjust = 1, vjust = 1, 
         legend.title = element_text(face = "bold", size = title),
         legend.text = element_text(size = title - 2, hjust = 1),
         # legend.spacing.x = unit(1.5,"cm"),
-        legend.key.size = unit(key.size, "lines")) 
+        legend.key.size = unit(key.size, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1)) 
 }
 
 # ref vs. non-ref beeswarm plots, log10 raw counts
@@ -839,7 +872,7 @@ dilution_line_plot <- function(gg_table, group_var, filter_var = NULL, stat, siz
 
   ggplot(gg_table %>% filter(!! filter_var, count > 0), aes(x = sample)) +
     geom_line(aes_string(group = group_var, color = group_var), stat = stat, size = size) +
-    geom_point(aes_string(color = group_var), stat = stat, size = 2 * size) +
+    geom_point(aes_string(color = group_var), stat = stat, size = 3 * size) +
     scale_x_discrete(labels = dilution_labels) +
     xlab("dilution")
 }
@@ -853,7 +886,7 @@ dilution_tax_line_plot <- function(gg_table, group_var, class_var = NULL, stat, 
 
   ggplot(gg_table, aes(x = sample)) +
     geom_line(aes_string(group = group_var, color = group_var, y = "taxa"), stat = stat, size = size) +
-    geom_point(aes_string(color = group_var, y = "taxa"), stat = stat, size = 2 * size) +
+    geom_point(aes_string(color = group_var, y = "taxa"), stat = stat, size = 3 * size) +
     scale_x_discrete(labels = dilution_labels) +
     xlab("dilution")
 }
