@@ -18,13 +18,14 @@ library(stringr)
 library(Biostrings)
 library(tidyverse)
 library(ShortRead)
+library(RColorBrewer)
 
 options(tibble.print_min = 100, tibble.print_max = 40)
 
 result_path <- "~/thesis/results/high_biomass"
 ref_path <- "~/thesis/references"
 analysis_path <- "~/thesis/analysis/high_biomass"
-script_path <- "~/thesis/noisy-microbes/scripts"
+script_path <- "~/thesis/noisy-microbes/community-inference/scripts"
 plot_path <- "~/thesis/analysis/plots"
 
 source(file.path(script_path, "seq_table_processing.R"))
@@ -112,7 +113,7 @@ for (d in datasets){
 Read in reference sequences, and compute Levenshtein ("Hamming") distances between all inferred sequences and all reference sequences.
 ```{r load reference fasta files}
 
-zymo_fastas <- file.path("zymo_SSU", list.files(file.path(ref_path, "zymo_SSU"), pattern = "_16S.fasta$"))
+zymo_fastas <- "Zymo_16S_references_v2.fasta"
 kozich_fasta <- "kozich_HMP_MOCK.fasta"
 schirmer_fasta <- "schirmer_BalancedRefSeqs.fasta"
 damore_fasta <- "schirmer_BalancedRefSeqs.fasta"
@@ -151,7 +152,7 @@ dataset_tables <- mapply(annotate_ref, dataset_tables, ref_dist_tables,
 Next, write each method's inferred (singleton-free) sequences to a fasta file, for BLASTing against nt.
 ```{r write fastas}
 
-mapply(write_fasta, dataset_tables, file.path(analysis_path, paste(datasets, "seqs.fasta", sep = "_")))
+mapply(write_fasta, dataset_tables, file.path(analysis_path, "blast", paste(datasets, "seqs.fasta", sep = "_")))
 
 # BLAST sequences against the 'nt' database using the following command:
 # blastn -query all_seqs.fasta -db nt -out all_blast.txt \
@@ -165,7 +166,7 @@ mapply(write_fasta, dataset_tables, file.path(analysis_path, paste(datasets, "se
 Read in the results of the BLAST searches. 
 ```{r load and annotate blast tables}
 
-blast_files <- file.path(analysis_path, paste(datasets, "blast.txt", sep = "_"))
+blast_files <- file.path(analysis_path, "blast", paste(datasets, "blast.txt", sep = "_"))
 blast_tables <- lapply(blast_files, load_blast)
 names(blast_tables) <- datasets
 blast_tables <- lapply(blast_tables, annotate_blast_table)
@@ -209,29 +210,29 @@ dataset_tables <- lapply(dataset_tables, annotate_class)
 Compute distances between `contam_noisy` and `contaminant` sequences. This should give a sense of how many `contam_noisy` sequences may have been generated through sequencer errors from `contaminant` template sequences. Also, compute distances between `contaminant` sequences. This will give an idea of whether or not OTU methods underestimate the number of `contaminant` sequences by lumping them together, if they are within the 97% similarity threshold of each other.
 ```{r contam_noisy distances}
 
-noisy_to_contam <- lapply(dataset_tables, compute_inter_dist, class1 = "contam_noisy", class2 = "contaminant")
+# noisy_to_contam <- lapply(dataset_tables, compute_inter_dist, class1 = "contam_noisy", class2 = "contaminant")
 # dataset_tables <- mapply(annotate_inter_dist, dataset_tables, noisy_to_contam, 
 #                         MoreArgs = list(column_name = "dist_to_contam"), SIMPLIFY = FALSE)
 
 # table minimum distances of contam_noisy sequences to contaminant sequences
-for (d in datasets){
-  cat(d, "distances of contam_noisy to contaminant sequences:\n")
-  if (length(noisy_to_contam[[d]]) > 0){
-    print(noisy_to_contam[[d]] %>% apply(., 1, min) %>% table())
-  } else cat("There were no Contam Noisy sequences for the", d, "dataset.\n")
-}
+# for (d in datasets){
+#   cat(d, "distances of contam_noisy to contaminant sequences:\n")
+#   if (length(noisy_to_contam[[d]]) > 0){
+#     print(noisy_to_contam[[d]] %>% apply(., 1, min) %>% table())
+#   } else cat("There were no Contam Noisy sequences for the", d, "dataset.\n")
+# }
 
 
-contam_to_contam <- lapply(dataset_tables, compute_inter_dist, class1 = "contaminant", class2 = "contaminant")
+# contam_to_contam <- lapply(dataset_tables, compute_inter_dist, class1 = "contaminant", class2 = "contaminant")
 # dataset_tables <- mapply(annotate_inter_dist, dataset_tables, contam_to_contam, 
 #                         MoreArgs = list(column_name = "dist_to_contam"), SIMPLIFY = FALSE)
 
 # table minimum distances of contam_noisy sequences to contaminant sequences
-for (d in datasets){
-  cat(d, "distances of contaminant to contaminant sequences:\n")
-  print(contam_to_contam[[d]] %>% apply(., 1, function(d) min(d[d > 0])) %>% table())
-  cat("\n")
-}
+# for (d in datasets){
+#   cat(d, "distances of contaminant to contaminant sequences:\n")
+#   print(contam_to_contam[[d]] %>% apply(., 1, function(d) min(d[d > 0])) %>% table())
+#   cat("\n")
+# }
 
 ```
 
@@ -240,25 +241,25 @@ Compute a table of sequence summaries for each method.
 ```{r compute sequence summaries}
 
 
-dataset_seq_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_strains,
+dataset_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_strains,
                               MoreArgs = list(sample_names = methods, max_dist = max_dist),
                               SIMPLIFY = FALSE)
-dataset_seq_summary <- lapply(dataset_summary, function(ds){
+dataset_summary <- lapply(dataset_summary, function(ds){
   colnames(ds)[1] <- "method"
   return(ds)
 })
-dataset_summary <- lapply(dataset_seq_summary, sanity_check_summary)
-lapply(dataset_seq_summary, function(ds) sum(ds$total != ds$check_sum))
+dataset_summary <- lapply(dataset_summary, sanity_check_summary)
+lapply(dataset_summary, function(ds) sum(ds$total != ds$check_sum))
 
 
-dataset_summary_short <- lapply(dataset_seq_summary, function(ds){
+dataset_summary_short <- lapply(dataset_summary, function(ds){
   dss <- ds %>% select(method, total, reference, ref_noisy, contaminant, contam_noisy, other)
   dss$method <- c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2")
   return(dss)
 })
 
-write_tables(dataset_seq_summary, file.path(analysis_path, "dataset_seq_summary_tables.tsv"))
-write_tables(dataset_summary_short, file.path(analysis_path, "dataset_summary_short_tables.tsv"), compact = TRUE)
+write_tables(dataset_summary, file.path(analysis_path, "summary", "dataset_summary_tables.tsv"))
+write_tables(dataset_summary_short, file.path(analysis_path, "summary", "dataset_summary_short_tables.tsv"), compact = TRUE)
 
 
 ```
@@ -267,13 +268,13 @@ write_tables(dataset_summary_short, file.path(analysis_path, "dataset_summary_sh
 Assign taxonomy to the sequences.
 ```{r assign taxonomy}
 
-genus_db <- "silva_nr_v132_train_set.fa.gz"
-species_db <- "silva_species_assignment_v132.fa.gz"
-taxa <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
-
-dataset_tables <- lapply(dataset_tables, assign_taxonomy, 
-                         genus_db_path = file.path(ref_path, genus_db), 
-                         species_db_path = file.path(ref_path, species_db))
+# genus_db <- "silva_nr_v132_train_set.fa.gz"
+# species_db <- "silva_species_assignment_v132.fa.gz"
+# taxa <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+# 
+# dataset_tables <- lapply(dataset_tables, assign_taxonomy, 
+#                          genus_db_path = file.path(ref_path, genus_db), 
+#                          species_db_path = file.path(ref_path, species_db))
 
 ```
 
@@ -281,15 +282,15 @@ dataset_tables <- lapply(dataset_tables, assign_taxonomy,
 Now, compute summary tables at the taxonomy level
 ```{r compute taxonomy summaries}
 
-dataset_taxa_summary <- lapply(dataset_tables, summarize_taxa, sample_names = methods, group = method)
-dataset_taxa_summary <- lapply(dataset_taxa_summary, function(dts){
-  dts$method <- factor(dts$method,
-                       levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
-                       labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
-  dts <- dts %>% arrange(method)
-  return(dts)
-})
-write_tables(dataset_taxa_summary, file.path(analysis_path, "dataset_taxa_summary_tables.tsv"), compact = TRUE)
+# dataset_taxa_summary <- lapply(dataset_tables, summarize_taxa, sample_names = methods, group = method)
+# dataset_taxa_summary <- lapply(dataset_taxa_summary, function(dts){
+#   dts$method <- factor(dts$method,
+#                        levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
+#                        labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+#   dts <- dts %>% arrange(method)
+#   return(dts)
+# })
+# write_tables(dataset_taxa_summary, file.path(analysis_path, "dataset_taxa_summary_tables.tsv"), compact = TRUE)
 
 ```
 
@@ -307,9 +308,9 @@ dataset_seq_stats <- lapply(dataset_seq_stats, function(dss){
   return(dss)
 })
 
-write_tables(dataset_seq_stats, file.path(analysis_path, "dataset_seq_stats.tsv"))
-write_tables(dataset_read_stats, file.path(analysis_path, "dataset_read_stats.tsv"))
-write_tsv(dataset_ref_perc, file.path(analysis_path, "dataset_ref_perc.tsv"))
+write_tables(dataset_seq_stats, file.path(analysis_path, "summary", "dataset_seq_stats.tsv"))
+write_tables(dataset_read_stats, file.path(analysis_path, "summary", "dataset_read_stats.tsv"))
+write_tsv(dataset_ref_perc, file.path(analysis_path, "summary", "dataset_ref_perc.tsv"))
 
 
 ```
@@ -326,6 +327,8 @@ all_table_gg$dataset <- factor(all_table_gg$dataset, levels = c("zymo", "kozich"
 all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
                               labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
 
+all_table_gg <- all_table_gg %>% filter(count > 0)
+
 all_table_gg <- annotate_norms(all_table_gg, group = c("dataset", "method"))
 
 # add some grouping variables for plotting convenience
@@ -337,6 +340,72 @@ levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "M
 
 ##Create various plots to visualize results
 
+Plot the sequence-level composition of samples by sequence class.
+```{r class seqs composition}
+
+# library(devtools)
+# unloadNamespace("ggbeeswarm")
+# unloadNamespace("ggridges")
+# unloadNamespace("dada2")
+# unloadNamespace("tidyverse")
+# unloadNamespace("ggplot2")
+# unloadNamespace("ggpubr")
+# unloadNamespace("cowplot")
+# dev_mode(TRUE)
+# # install_github("hadley/ggplot2")
+# library(ggplot2)
+# packageVersion("ggplot2")
+# dev_mode(F)
+# library(tidyverse)
+# 
+theme_set(theme_bw())
+classes = levels(all_table_gg$class)
+class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
+# 
+# class_seqs_comp <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
+#   geom_bar(aes(fill = class), width = 3, position = position_dodge(preserve = "single")) +
+#   scale_fill_manual(name = "Sequence class", values = class_colors) +
+#   labs(x = "method", y = "number of sequences") +
+#   facet_wrap(~dataset)
+# class_seqs_comp
+# 
+# unloadNamespace("tidyverse")
+# unloadNamespace("ggplot2")
+# library(ggplot2)
+# packageVersion("ggplot2")
+# library(tidyverse)
+
+class_seqs_comp <- ggplot(all_table_gg, aes(x = method)) +
+  geom_bar(aes(fill = fct_rev(class)), width = 0.8) +
+  facet_wrap(~dataset) +
+  scale_fill_manual(name = "Sequence class   ", values = rev(class_colors), labels = paste(rev(classes), "   ")) +
+  labs(x = "method", y = "number of sequences") +
+  big_labels(title = 72, text = 60, legend.position = "top") +
+  theme(panel.spacing = unit(3, "lines"), 
+        legend.margin = margin(b = 90)) +
+  guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
+class_seqs_comp
+
+# class_counts <- all_table_gg %>% 
+#   filter(count > 0) %>%
+#   group_by(dataset, method, class) %>% 
+#   summarize(count = n()) %>% 
+#   complete(class, fill = list(count = 0))
+
+# class_seqs_comp <- ggplot(class_counts, aes(x = method)) +
+#   geom_col(aes(y = count, fill = fct_rev(class)), width = 0.6, position = position_dodge()) +
+#   scale_fill_manual(name = "Sequence class   ", values = rev(class_colors), labels = paste(rev(classes), "   ")) +
+#   labs(x = "method", y = "number of sequences") +
+#   facet_wrap(~dataset) +
+#   big_labels(title = 72, text = 60, legend.position = "top") +
+#   theme(panel.spacing = unit(3, "lines"), 
+#         legend.margin = margin(b = 90)) +
+#   guides(fill = guide_legend(keywidth = 4.5, keyheight = 4.5))
+# class_seqs_comp
+
+```
+
+
 
 Plot the read-level composition of samples by sequence class. 
 ```{r class reads composition}
@@ -345,18 +414,18 @@ Plot the read-level composition of samples by sequence class.
 # class_colors <- brewer.pal(9, "Set1")[c(2, 3, 1, 4, 5)]
 # class_colors <- brewer.pal(8, "Dark2")[c(8, 2, 3, 4, 1)]
 # class_colors <- brewer.pal(8, "Accent")[c(8, 7, 1, 6, 5)]
-class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
-
-
-class_reads_comp_dataset <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
-  geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.5) +
-  scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
-                    guide = guide_legend(reverse = FALSE)) +
-  facet_wrap(~dataset) +
-  labs(title = "Read-level composition by sequence class",
-       subtitle = "", y = "relative abundance") +
-  big_labels(angle = 30, hjust = 0.7, vjust = 0.7, legend.position = "right")
-class_reads_comp_dataset
+# class_colors <- brewer.pal(12, "Paired")[c(2, 1, 6, 5, 10)]
+# 
+# 
+# class_reads_comp_dataset <- ggplot(all_table_gg %>% filter(count > 0), aes(x = method)) +
+#   geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.5) +
+#   scale_fill_manual(name = "Sequence class", values = rev(class_colors), 
+#                     guide = guide_legend(reverse = FALSE)) +
+#   facet_wrap(~dataset) +
+#   labs(title = "Read-level composition by sequence class",
+#        subtitle = "", y = "relative abundance") +
+#   big_labels(angle = 30, hjust = 0.7, vjust = 0.7, legend.position = "right")
+# class_reads_comp_dataset
 
 ```
 
@@ -364,21 +433,21 @@ class_reads_comp_dataset
 Create stacked histograms showing numbers of sequences vs. read count for reference and non-reference sequences.
 ```{r read count histograms}
 
-theme_set(theme_bw())
-
-library(ggridges)
-
-min_count = 0
-dname = "Kozich"
-
-read_hist <- ggplot(all_table_gg %>% filter(dataset == dname, count > min_count), aes(x = count, y = reference)) +
-  geom_density_ridges(aes(fill = reference, height = ..density..), scale = 0.9, stat = "binline", bins = 120, panel_scaling = FALSE) +
-  geom_vline(data = all_table_gg %>% filter(reference) %>% group_by(method) %>% summarise(min = min(count)), aes(xintercept = min)) +
-  labs(title = "Histograms of abundances of Reference vs. non-Reference sequences", x = "abundance", y = "Sequence type") +
-  facet_wrap(~method) +
-  scale_fill_brewer(name = "Sequence type", palette = "Set1", labels = c("non-Reference", "Reference")) +
-  big_labels()
-read_hist
+# theme_set(theme_bw())
+# 
+# library(ggridges)
+# 
+# min_count = 0
+# dname = "Kozich"
+# 
+# read_hist <- ggplot(all_table_gg %>% filter(dataset == dname, count > min_count), aes(x = count, y = reference)) +
+#   geom_density_ridges(aes(fill = reference, height = ..density..), scale = 0.9, stat = "binline", bins = 120, panel_scaling = FALSE) +
+#   geom_vline(data = all_table_gg %>% filter(reference) %>% group_by(method) %>% summarise(min = min(count)), aes(xintercept = min)) +
+#   labs(title = "Histograms of abundances of Reference vs. non-Reference sequences", x = "abundance", y = "Sequence type") +
+#   facet_wrap(~method) +
+#   scale_fill_brewer(name = "Sequence type", palette = "Set1", labels = c("non-Reference", "Reference")) +
+#   big_labels()
+# read_hist
 
 ```
 
@@ -386,91 +455,89 @@ read_hist
 Create plots to show relative strength of signal (reference sequence matches) to noise (non-reference sequences).
 ```{r snr plots}
 
-library(ggbeeswarm)
+# library(ggbeeswarm)
 library(scales)
-library(cowplot)
-library(gridExtra)
+# library(cowplot)
+# library(gridExtra)
 
-dname = "Schirmer"
-
-# ref vs. non-ref boxplots, log10 raw counts
-snr_box <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
-                  aes(x = method, y = log10_count)) +
-  geom_boxplot(aes(fill = factor(reference, levels = c(TRUE, FALSE)))) +
-  labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
-  scale_fill_manual(name = "Sequence type", labels = c("Reference", "non-Reference"), values = c("blue", "orange")) +
-  big_labels()
-snr_box
-
-# ref vs. non-ref violin plots, log10 raw counts
-snr_violin <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
-                     aes(x = method, y = log10_count)) +
-  geom_violin(aes(fill = factor(reference, levels = c(T, F)))) +
-  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
-  scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
-  big_labels()
-snr_violin
-
-snr_jitter <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
-                     aes(x = method, y = log10_count)) +
-  geom_jitter(aes(color = factor(reference, levels = c(T, F))), width = 0.1, size = 2) +
-  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
-  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
-  big_labels()
-snr_jitter
-
-# ref vs. non-ref beeswarm plots, log10 raw counts
-snr_bees <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
-                   aes(x = method, y = log10_count)) +
-  geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), priority = "ascending", cex = 0.15, dodge.width = 0.5) +
-  # geom_quasirandom(aes(color = factor(reference, levels = c(T, F))), dodge.width = 0.75, bandwidth = 0.5) +
-  labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-          subtitle = "Dilution series 'neat' sample", x = "method", y = "log10(read counts)") +
-  scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
-  big_labels()
-snr_bees
+# dname = "Schirmer"
+# 
+# # ref vs. non-ref boxplots, log10 raw counts
+# snr_box <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
+#                   aes(x = method, y = log10_count)) +
+#   geom_boxplot(aes(fill = factor(reference, levels = c(TRUE, FALSE)))) +
+#   labs(title = "Distribution of log10(read counts) for reference and non-reference sequences",
+#           subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
+#   scale_fill_manual(name = "Sequence type", labels = c("Reference", "non-Reference"), values = c("blue", "orange")) +
+#   big_labels()
+# snr_box
 
 snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
-  # geom_boxplot(aes(x = method, y = count, color = factor(reference, levels = c(TRUE, FALSE)))) +
   geom_boxplot(aes(x = method, y = count, fill = factor(reference, levels = c(TRUE, FALSE))),
-               color = "black", show.legend = T) +
-  # labs(title = "Abundance distributions of Reference and non-Reference sequences",
-  #         subtitle = "", x = "method", y = "log10(abundance)") +
+               outlier.size = 3, outlier.stroke = 1, size = 1.5) +
   labs(x = "method", y = expression(bold("log"[10]*" abundance"))) +
-  scale_fill_manual(name = "Sequence type   ", 
+  scale_fill_manual(name = "Sequence class   ", 
                     labels = paste(c(" Reference", " non-Reference"), "   "), 
                     values = c("blue", "orange")) +
-  scale_color_manual(name = "Sequence type   ", 
-                    labels = paste(c(" Reference", " non-Reference"), "   "), 
-                    values = c("blue", "orange")) +  
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))) +
   facet_wrap(~dataset) +
-  big_labels(title = 24, text = 20, legend.position = "top") +
-  theme(panel.spacing = unit(1.5, "lines")) +
-  guides(color = guide_legend(override.aes = list(size = 5)))
+  big_labels(title = 72, text = 60, legend.position = "top") +
+  theme(panel.spacing = unit(3, "lines"),
+        legend.margin = margin(b = 90)) +
+  guides(fill = guide_legend(keywidth = 6, keyheight = 9))
 snr_box_facet
 
-box_legend <- get_legend(snr_box_facet)
-box_legend <- plot_grid(box_legend, ncol = 1)
-box_legend
 
-grid.arrange(snr_box_facet, box_legend, ncol = 1)
+# ref vs. non-ref beeswarm plots, log10 raw counts
+# snr_bees <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
+#                    aes(x = method, y = log10_count)) +
+#   geom_beeswarm(aes(color = factor(reference, levels = c(T, F))), priority = "ascending", cex = 0.15, dodge.width = 0.5) +
+#   # geom_quasirandom(aes(color = factor(reference, levels = c(T, F))), dodge.width = 0.75, bandwidth = 0.5) +
+#   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+#           subtitle = "Dilution series 'neat' sample", x = "method", y = "log10(read counts)") +
+#   scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+#   big_labels()
+# snr_bees
 
-snr_bees_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
-  geom_beeswarm(aes(x = method, y = log10_count, color = factor(reference, levels = c(T, F))), size = 2, cex = 0.05, dodge.width = 0.3) +
-  # labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
-  #         subtitle = paste("Dilution series processed with various methods"), x = "sample dilution", y = "log10(read counts)") +
-  labs(x = "sample dilution", y = "log10(read count)") +
-  scale_color_manual(name = "sequence identity", labels = c("Reference", "non-Reference"), values = c("blue", "orange")) +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-        labels = trans_format("log10", math_format(10^.x))) +
-  facet_wrap(~dataset, nrow = 2) +
-  big_labels(legend.position = "top")
-snr_bees_facet + guides(color = guide_legend(override.aes = list(size = 3)))
+
+# snr_bees_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
+#   geom_beeswarm(aes(x = method, y = log10_count, color = factor(reference, levels = c(T, F))), size = 2, cex = 0.05, dodge.width = 0.3) +
+#   # labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+#   #         subtitle = paste("Dilution series processed with various methods"), x = "sample dilution", y = "log10(read counts)") +
+#   labs(x = "sample dilution", y = "log10(read count)") +
+#   scale_color_manual(name = "sequence identity", labels = c("Reference", "non-Reference"), values = c("blue", "orange")) +
+#   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+#         labels = trans_format("log10", math_format(10^.x))) +
+#   facet_wrap(~dataset, nrow = 2) +
+#   big_labels(legend.position = "top")
+# snr_bees_facet + guides(color = guide_legend(override.aes = list(size = 3)))
+
+
+# box_legend <- get_legend(snr_box_facet)
+# box_legend <- plot_grid(box_legend, ncol = 1)
+# box_legend
+# 
+# grid.arrange(snr_box_facet, box_legend, ncol = 1)
+
+# ref vs. non-ref violin plots, log10 raw counts
+# snr_violin <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
+#                      aes(x = method, y = log10_count)) +
+#   geom_violin(aes(fill = factor(reference, levels = c(T, F)))) +
+#   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+#           subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
+#   scale_fill_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+#   big_labels()
+# snr_violin
+
+# snr_jitter <- ggplot(data = all_table_gg %>% filter(dataset == dname, count > 0), 
+#                      aes(x = method, y = log10_count)) +
+#   geom_jitter(aes(color = factor(reference, levels = c(T, F))), width = 0.1, size = 2) +
+#   labs(title = "Density distribution of log10(read counts) for reference and non-reference sequences",
+#           subtitle = "Dilution series 'neat' sample", x = "sample dilution", y = "log10(read counts)") +
+#   scale_color_manual(name = "sequence identity", labels = c("reference", "non-reference"), values = c("blue", "orange")) +
+#   big_labels()
+# snr_jitter
 
 
 # average (mean(log10)) of ref vs. non-ref signal
@@ -492,40 +559,41 @@ snr_bees_facet + guides(color = guide_legend(override.aes = list(size = 3)))
 Create plot to show sample composition, colored by reference vs. non-reference.
 ```{r composition plot}
 
-library(RColorBrewer)
-
-set.seed(444)
-
-dname = "D'Amore"
-
-ref_colors <- brewer.pal(sum(dataset_tables$zymo$reference), "Dark2")
-other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!dataset_tables$zymo$reference), replace = TRUE)
-
-dataset_tables$zymo$color <- rep(NA, nrow(dataset_tables$zymo))
-dataset_tables$zymo$color[dataset_tables$zymo$reference] <- ref_colors
-dataset_tables$zymo$color[!dataset_tables$zymo$reference] <- other_colors
-
-
-color_gg <- dataset_tables$zymo %>% select(id, methods, color) %>% gather("method", "count", methods)
-legend_color <- c(bright = ref_colors[2], dull = other_colors[2])
-all_table_gg <- inner_join(all_table_gg, color_gg)
-
-comp_bar <- ggplot(all_table_gg, aes(x = method, y = count)) +
-  geom_col(aes(fill = color, group = reference, alpha = ifelse(reference, "bright", "dull")), width = 0.5, position = position_fill()) +
-  scale_fill_identity(guide = FALSE) +
-  scale_alpha_manual(name = "Sequence type", 
-                     labels = c("mock community", "other"),
-                     values = c(bright = 1, dull = 1), 
-                     guide = guide_legend(override.aes = list(fill = c(ref_colors[4], "#AEAEAE")), 
-                                          keywidth = NULL, keyheight = NULL)) +
-  labs(title = "Relative composition sample processed by different methods", 
-       subtitle = "Zymo 'neat' sample",
-       x = "sample dilution", y = "fraction of sample") +
-  theme(legend.position = "right", legend.title = element_text(size = 12), 
-        axis.text = element_text(size = 12),
-        axis.title = element_text(size = 16),
-        plot.title = element_text(size = 20))
-comp_bar
+# library(RColorBrewer)
+# 
+# set.seed(444)
+# 
+# dname = "Zymo"
+# 
+# ref_colors <- brewer.pal(sum(dataset_tables$zymo$reference), "Dark2")
+# other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!dataset_tables$zymo$reference), replace = TRUE)
+# 
+# dataset_tables$zymo$color <- rep(NA, nrow(dataset_tables$zymo))
+# dataset_tables$zymo$color[dataset_tables$zymo$reference] <- ref_colors
+# dataset_tables$zymo$color[!dataset_tables$zymo$reference] <- other_colors
+# 
+# 
+# color_gg <- dataset_tables$zymo %>% select(id, methods, color) %>% gather("method", "count", methods)
+# legend_color <- c(bright = ref_colors[2], dull = other_colors[2])
+# all_table_gg <- inner_join(all_table_gg, color_gg)
+# 
+# comp_bar <- ggplot(all_table_gg, aes(x = method, y = count)) +
+#   geom_col(aes(fill = color, group = reference, alpha = ifelse(reference, "bright", "dull")), width = 0.5, 
+#            position = position_fill()) +
+#   scale_fill_identity(guide = FALSE) +
+#   scale_alpha_manual(name = "Sequence type", 
+#                      labels = c("mock community", "other"),
+#                      values = c(bright = 1, dull = 1), 
+#                      guide = guide_legend(override.aes = list(fill = c(ref_colors[4], "#AEAEAE")), 
+#                                           keywidth = NULL, keyheight = NULL)) +
+#   labs(title = "Relative composition sample processed by different methods", 
+#        subtitle = "Zymo 'neat' sample",
+#        x = "sample dilution", y = "fraction of sample") +
+#   theme(legend.position = "right", legend.title = element_text(size = 12), 
+#         axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 16),
+#         plot.title = element_text(size = 20))
+# comp_bar
 #comp_bar + coord_polar(theta = "y", start = 0)
 
 ```
@@ -534,14 +602,14 @@ comp_bar
 Plot bar plots of relative abundance of reference sequences, facetted by method.
 ```{r reference seq bar plots}
 
-dname = "Zymo"
-
-ref_bars <- ggplot(data = all_table_gg %>% filter(dataset == dname, reference)) +
-  geom_col(aes(x = id, y = rel_count, fill = id), width = 0.8) +
-  facet_wrap(~method) +
-  scale_fill_brewer(palette = "Dark2") +
-  big_labels()
-ref_bars
+# dname = "Zymo"
+# 
+# ref_bars <- ggplot(data = all_table_gg %>% filter(dataset == dname, reference)) +
+#   geom_col(aes(x = id, y = rel_count, fill = id), width = 0.8) +
+#   facet_wrap(~method) +
+#   scale_fill_brewer(palette = "Dark2") +
+#   big_labels()
+# ref_bars
 
 # ref_joy <- ggplot(data = all_table_gg %>% filter(reference)) +
 #   geom_density_ridges(aes(x = id, y = method, fill = id, height = ..density..), stat = "density")
@@ -553,16 +621,16 @@ ref_bars
 Plot distribution boxplots of non-reference read counts for "contaminant" sequences vs non-contaminant ("other") sequences.
 ```{r snr contaminant vs other}
 
-dname = "Kozich"
-
-snr_box_contam <- ggplot(all_table_gg %>% filter(dataset == dname, count > 0, !ref_like), 
-                         aes(x = method, y = log10_count)) +
-  geom_boxplot(aes(fill = factor(contaminant, levels = c(TRUE, FALSE)))) +
-  labs(title = "Distribution of log10(read counts) for non-reference contaminant and non-contaminant sequences",
-          subtitle = "Dilution series 'neat' sample processed with various methods", x = "sample dilution", y = "log10(read counts)") +
-  scale_fill_manual(name = "sequence identity", labels = c("contaminant", "non-contaminant"), values = c("blue", "orange")) +
-  big_labels()
-snr_box_contam
+# dname = "Kozich"
+# 
+# snr_box_contam <- ggplot(all_table_gg %>% filter(dataset == dname, count > 0, !ref_like), 
+#                          aes(x = method, y = log10_count)) +
+#   geom_boxplot(aes(fill = factor(contaminant, levels = c(TRUE, FALSE)))) +
+#   labs(title = "Distribution of log10(read counts) for non-reference contaminant and non-contaminant sequences",
+#           subtitle = "Dilution series 'neat' sample processed with various methods", x = "sample dilution", y = "log10(read counts)") +
+#   scale_fill_manual(name = "sequence identity", labels = c("contaminant", "non-contaminant"), values = c("blue", "orange")) +
+#   big_labels()
+# snr_box_contam
 
 ```
 
@@ -570,42 +638,42 @@ snr_box_contam
 Plot bar plots of summary stats (number of "reference", "ref_noisy", "contaminant", "other").
 ```{r summary stat bar plots}
 
-summary_gg <- gather(summary_table, "statistic", "value", -method) %>% as.tibble
-
-ref_mean <- all_table_gg %>% filter(reference) %>% .[["count"]] %>% mean()
-ref_noisy_mean <- all_table_gg %>% filter(ref_noisy) %>% .[["count"]] %>% mean()
-contam_mean <- all_table_gg %>% filter(contaminant) %>% .[["count"]] %>% mean()
-contam_noisy_mean <- all_table_gg %>% filter(contam_noisy) %>% .[["count"]] %>% mean()
-other_mean <- all_table_gg %>% filter(other) %>% .[["count"]] %>% mean()
-
-summary_gg <- summary_gg %>% mutate(norm_mean = rep(1, nrow(summary_gg)))
-summary_gg[summary_gg$statistic == "reference", "norm_mean"] <- summary_gg %>% 
-  filter(statistic == "reference") %>% .[["value"]] * log10(ref_mean)
-summary_gg[summary_gg$statistic == "ref_noisy", "norm_mean"] <- summary_gg %>% 
-  filter(statistic == "ref_noisy") %>% .[["value"]] * log10(ref_noisy_mean)
-summary_gg[summary_gg$statistic == "contaminant", "norm_mean"] <- summary_gg %>% 
-  filter(statistic == "contaminant") %>% .[["value"]] * log10(contam_mean)
-summary_gg[summary_gg$statistic == "contam_noisy", "norm_mean"] <- summary_gg %>% 
-  filter(statistic == "contam_noisy") %>% .[["value"]] * log10(contam_noisy_mean)
-summary_gg[summary_gg$statistic == "other", "norm_mean"] <- summary_gg %>% 
-  filter(statistic == "other") %>% .[["value"]] * log10(other_mean)
-
-bar_colors <- brewer.pal(9, "Set1")
-
-summary_bars <- ggplot(data = summary_gg %>% filter(statistic %in% c("reference", "ref_noisy", "contaminant", "contam_noisy", "other")), 
-                       aes(x = statistic)) +
-  geom_col(aes(y = log2(1 + value), fill = statistic), position = position_dodge()) +
-  facet_wrap(~method) +
-  scale_fill_manual(values = ref_colors[c(1, 3, 4, 6, 8)])
-  #scale_fill_brewer(palette = "Set1")
-summary_bars
-
-summary_pct_bars <- ggplot(data = summary_gg %>% filter(statistic %in% c("pct_ref", "pct_ref_noisy", "pct_contam", "pct_contam_noisy", "pct_other")), 
-                       aes(x = statistic)) +
-  geom_col(aes(y = value, fill = statistic), position = position_dodge()) +
-  facet_wrap(~method) +
-  scale_fill_manual(values = bar_colors[c(3, 4, 5, 2, 1)])
-  #scale_fill_brewer(palette = "Set1")
-summary_pct_bars
+# summary_gg <- gather(summary_table, "statistic", "value", -method) %>% as.tibble
+# 
+# ref_mean <- all_table_gg %>% filter(reference) %>% .[["count"]] %>% mean()
+# ref_noisy_mean <- all_table_gg %>% filter(ref_noisy) %>% .[["count"]] %>% mean()
+# contam_mean <- all_table_gg %>% filter(contaminant) %>% .[["count"]] %>% mean()
+# contam_noisy_mean <- all_table_gg %>% filter(contam_noisy) %>% .[["count"]] %>% mean()
+# other_mean <- all_table_gg %>% filter(other) %>% .[["count"]] %>% mean()
+# 
+# summary_gg <- summary_gg %>% mutate(norm_mean = rep(1, nrow(summary_gg)))
+# summary_gg[summary_gg$statistic == "reference", "norm_mean"] <- summary_gg %>% 
+#   filter(statistic == "reference") %>% .[["value"]] * log10(ref_mean)
+# summary_gg[summary_gg$statistic == "ref_noisy", "norm_mean"] <- summary_gg %>% 
+#   filter(statistic == "ref_noisy") %>% .[["value"]] * log10(ref_noisy_mean)
+# summary_gg[summary_gg$statistic == "contaminant", "norm_mean"] <- summary_gg %>% 
+#   filter(statistic == "contaminant") %>% .[["value"]] * log10(contam_mean)
+# summary_gg[summary_gg$statistic == "contam_noisy", "norm_mean"] <- summary_gg %>% 
+#   filter(statistic == "contam_noisy") %>% .[["value"]] * log10(contam_noisy_mean)
+# summary_gg[summary_gg$statistic == "other", "norm_mean"] <- summary_gg %>% 
+#   filter(statistic == "other") %>% .[["value"]] * log10(other_mean)
+# 
+# bar_colors <- brewer.pal(9, "Set1")
+# 
+# summary_bars <- ggplot(data = summary_gg %>% filter(statistic %in% c("reference", "ref_noisy", "contaminant", "contam_noisy", "other")), 
+#                        aes(x = statistic)) +
+#   geom_col(aes(y = log2(1 + value), fill = statistic), position = position_dodge()) +
+#   facet_wrap(~method) +
+#   scale_fill_manual(values = ref_colors[c(1, 3, 4, 6, 8)])
+#   #scale_fill_brewer(palette = "Set1")
+# summary_bars
+# 
+# summary_pct_bars <- ggplot(data = summary_gg %>% filter(statistic %in% c("pct_ref", "pct_ref_noisy", "pct_contam", "pct_contam_noisy", "pct_other")), 
+#                        aes(x = statistic)) +
+#   geom_col(aes(y = value, fill = statistic), position = position_dodge()) +
+#   facet_wrap(~method) +
+#   scale_fill_manual(values = bar_colors[c(3, 4, 5, 2, 1)])
+#   #scale_fill_brewer(palette = "Set1")
+# summary_pct_bars
 
 ```
