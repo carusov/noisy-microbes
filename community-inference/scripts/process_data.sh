@@ -88,10 +88,10 @@ run_all_pipelines.sh -i $DATA/damore_uneven -o $RESULTS/damore_uneven \
 # DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
 
 
-# Process dilution series without extraction blank, with pooled samples
+# Process dilution series with separate samples
 printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
-printf "\nProcessing Zymo dilution series (without blank), with pooled samples...\n"
+printf "\nProcessing Zymo dilution series with separated samples...\n"
 printf "\n**********************************************************************"
 printf "\n**********************************************************************\n"
 merge_and_filter.sh -w $DATA/dilution \
@@ -100,40 +100,22 @@ merge_and_filter.sh -w $DATA/dilution \
 		    -d $MAXDIFFS  \
 		    -e $MAXEE -n $MAXN
 
-run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution_pooled \
-		     -f 230 -b 210 \
-		     -s 221 -l 225 \
-		     -F 2.5 -R 2.5 \
-		     -m pooled
-# DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
-
-# Process dilution series without extraction blank, with separate samples
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
-printf "\nProcessing Zymo dilution series (without blank), with separated samples...\n"
-printf "\n**********************************************************************"
-printf "\n**********************************************************************\n"
 run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution_separate \
 		     -f 230 -b 210 \
 		     -s 221 -l 225 \
 		     -F 2.5 -R 2.5 \
-		     -m separate
+
 		     
-
-# Process dilution series with extraction blank
-#printf "\n**********************************************************************"
-#printf "\n**********************************************************************\n"
-#printf "\nProcessing Zymo dilution series with blank sample...\n"
-#printf "\n**********************************************************************"
-#printf "\n**********************************************************************\n"
-#merge_and_filter.sh -w $DATA/dilution_w_blank \
-#		    -f 230 -b 210 \
-#		    -s 223 -l 223 \
-#		    -d $MAXDIFFS  \
-#		    -e $MAXEE -n $MAXN
-
-#run_all_pipelines.sh -i $DATA/dilution_w_blank -o $RESULTS/dilution_w_blank \
-#		     -f 230 -b 210 \
-#		     -s 223 -l 223
-
+# Process dilution series with pooled samples
+printf "\n**********************************************************************"
+printf "\n**********************************************************************\n"
+printf "\nProcessing Zymo dilution series with pooled samples...\n"
+printf "\n**********************************************************************"
+printf "\n**********************************************************************\n"
+run_all_pipelines.sh -i $DATA/dilution -o $RESULTS/dilution_pooled \
+		     -f 230 -b 210 \
+		     -s 221 -l 225 \
+		     -F 2.5 -R 2.5 \
+		     --pooled
+# DADA2 pipeline filter run with maxEE = c(2.5, 2.5)
 
