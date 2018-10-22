@@ -907,49 +907,35 @@ seq_mats <- lapply(method_tables, function(mt){
   return(seq_mat)
 })
 
-# load taxonomy tables
-# tax_mats <- lapply(list.files(result_path), function(f){
-#   tax_table <- read.table(file.path(result_path, f, paste0(f, "_taxa.txt")), header = TRUE, sep = "\t")
-#   tax_mat <- as.matrix(tax_table)
-#   return(tax_mat)
-# })
-# names(tax_mats) <- list.files(result_path)
-# tax_mats <- tax_mats[methods]
-
-# extract sequences from taxonomy tables and convert to DNAStringSet
-# seqs_list <- lapply(tax_mats, function(t) DNAStringSet(t[, 1]))
-
-# remove sequences from taxonomy tables
-# tax_mats <- lapply(tax_mats, function(t) t[, -1])
 
 # construct phyloseq OTU and taxonomy tables
 otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
 # tax_tabs <- lapply(tax_mats, tax_table)
 
 # construct phyloseq objects
-# physeqs <- mapply(phyloseq, otu_tabs, tax_tabs, seqs_list, SIMPLIFY = FALSE)
-physeqs <- mapply(phyloseq, otu_tabs, SIMPLIFY = FALSE)
+physeqs <- lapply(otu_tabs, phyloseq)
 
-# sam_data <- as.data.frame(physeqs[[1]]@sam_data)
+# compute alpha diversity
+alpha_indices <- c("Chao1", "Shannon", "Simpson", "InvSimpson", "Fisher")
+alpha_div <- lapply(physeqs, estimate_richness, measures = alpha_indices)
 
-# remove intermediate objects
-# rm(seq_mats, tax_mats, seqs_list, otu_tabs, tax_tabs)
-
-alpha_indices <- c("Shannon", "Simpson", "InvSimpson", "Fisher")
-alpha_div <- lapply(physeqs, estimate_richness, measures = c("Shannon", "Simpson", "InvSimpson", "Fisher"))
-
+# combine alpha diversity tables into one table for plotting
 alpha_div <- lapply(alpha_div, rownames_to_column, var = "sample")
 alpha_div <- lapply(alpha_div, as.tibble)
 alpha_div_gg <- lapply(alpha_div, gather, key = "alpha_index", value = "diversity", alpha_indices)
 alpha_div_gg <- do.call("rbind", alpha_div_gg) %>% 
   mutate(method = rep(methods, each = length(sample_names) * length(alpha_indices)))
 
-alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Simpson")), aes(x = sample, group = method)) +
-  geom_point(aes(y = diversity, color = alpha_index))
-alpha_dots
+alpha_colors <- brewer.pal(12, "Paired")[c(2, 3, 9, 7, 6, 12)]
 
-all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
-                              labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
+alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Shannon", "Simpson", "InvSimpson", "Fisher")), 
+                     aes(x = sample)) +
+  geom_point(aes(y = diversity, color = method), size = 2.5) +
+  scale_color_manual(values = alpha_colors) +
+  scale_x_discrete(labels = dilution_labels) +
+  facet_wrap(~alpha_index, nrow = 1, scales = "free_y") +
+  big_labels(legend.position = "top")
+alpha_dots
 
 
 ```

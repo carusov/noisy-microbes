@@ -468,8 +468,8 @@ class_reads_comp <- ggplot(all_table_gg, aes(x = method)) +
   big_labels(title = 72, text = 60, legend.position = "top") +
   theme(panel.spacing = unit(3, "lines"), 
         legend.margin = margin(b = 90)) +
-  # guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
-  guides(fill = FALSE)
+  guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
+  # guides(fill = FALSE)
 class_reads_comp
 
 ggarrange(class_seqs_comp, class_reads_comp, labels = c("A", "B"), vjust = c(1.5, 0.5), nrow = 2, 
@@ -575,6 +575,49 @@ comp_bar_facet <- ggplot(all_table_gg, aes(x = method, y = count)) +
         strip.text = element_text(size = 16),
         panel.spacing = unit(1, "lines"))
 comp_bar_facet
+
+```
+
+
+Plot alpha diversity.
+```{r create phyloseq}
+
+library("phyloseq")
+
+# extract sequence matrices of read counts only from the method sequence tibbles
+seq_mats <- lapply(dataset_tables, function(mt){
+  seq_mat <- as.matrix(mt[, methods])
+  rownames(seq_mat) <- mt$id
+  return(seq_mat)
+})
+
+
+# construct phyloseq OTU and taxonomy tables
+otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
+
+# construct phyloseq objects
+physeqs <- lapply(otu_tabs, phyloseq)
+
+# compute alpha diversity
+alpha_indices <- c("Chao1", "Shannon", "Simpson", "InvSimpson", "Fisher")
+alpha_div <- lapply(physeqs, estimate_richness, measures = alpha_indices)
+
+# combine alpha diversity tables into one table for plotting
+alpha_div <- lapply(alpha_div, rownames_to_column, var = "method")
+alpha_div <- lapply(alpha_div, as.tibble)
+alpha_div_gg <- lapply(alpha_div, gather, key = "alpha_index", value = "diversity", alpha_indices)
+alpha_div_gg <- do.call("rbind", alpha_div_gg) %>% 
+  mutate(dataset = rep(datasets, each = length(methods) * length(alpha_indices)))
+
+alpha_colors <- brewer.pal(12, "Paired")[c(2, 3, 9, 8)]
+
+alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Shannon", "Simpson", "InvSimpson", "Fisher")), 
+                     aes(x = method, group = dataset)) +
+  geom_point(aes(y = diversity, color = dataset), size = 2.5) +
+  scale_color_manual(values = alpha_colors) +
+  facet_wrap(~alpha_index, nrow = 1, scales = "free_y")
+alpha_dots
+
 
 ```
 
