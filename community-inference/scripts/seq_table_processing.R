@@ -295,6 +295,34 @@ collapse_group_dist <- function(dist_table, groups){
 }
 
 
+# function to find sequences (or any named vector, really) with names matching any of a set of names
+# get_matching_seqs <- function(seqs, patterns){
+#   ref_names <- names(seqs)
+#   m_ind <- sapply(patterns, function(p) str_detect(ref_names, p))
+#   
+#   if (length(m_ind) > 0){
+#     m_ind <- apply(m_ind, 1, any)
+#     return(seqs[m_ind])
+#   } else return(NULL)
+# }
+
+
+# function to determine reference strains completely missing from a set of reads
+get_missing_strains <- function(data_seqs, refs){
+  if (length(refs) > 0){
+    # result <- list()
+    dist_mat <- outer(data_seqs, refs, levDist, band = -1)
+    missing <- apply(dist_mat, 2, min) > 0
+    missing <- tapply(missing, as.factor(names(missing)), all)
+    missing <- names(missing[missing])
+    # result[["missing"]] <- missing
+    # result[["distances"]] <- dist_mat
+    # return(result)
+    return(missing)
+  } else return(character(0))
+}
+
+
 # function to generate a table of "noisy"" sequences: those that are very similar to the reference sequences
 countNoisySeqs <- function(seq_tab, dist_mat, min_dist = 1, max_dist = 3) {
   if (max(colSums(dist_mat == 0)) > 1) {
@@ -541,11 +569,12 @@ count_strains <- function(seq_vector, strain_dist){
 
 
 # function to create a sequence summary table from a sequence table
-summarize_seqs <- function(seq_table, dist_mat, strains, sample_names, max_dist){
+summarize_seqs <- function(seq_table, dist_mat, refs, sample_names, max_dist){
   # summarize counts of various classes
-  exp_strains <- rep(length(unique(strains)), length(sample_names))
+  sample_names <- as.character(sample_names)
+  exp_strains <- rep(length(unique(names(refs))), length(sample_names))
   total_count <- colSums(seq_table[, sample_names] > 0)
-  strain_dist <- collapse_group_dist(dist_mat, strains)
+  strain_dist <- collapse_group_dist(dist_mat, names(refs))
   strain_count <- sapply(seq_table[, sample_names], count_strains, strain_dist)
   # strain_count <- sapply(seq_table[, sample_names], function(m) sum(colSums(strain_dist[m > 0,]) > 0))
   ref_count <- colSums(seq_table[, sample_names] > 0 & seq_table$reference)
@@ -691,12 +720,14 @@ compute_pr_seqs <- function(sum_table){
   seq_stats <- sum_table %>% 
     mutate(TP = reference,
            FN = pmax(exp_strains - reference, 0),
-           FP = ref_noisy + contaminant + contam_noisy + other) %>%
-    select(1, TP, FN, FP)
+           FP = ref_noisy + contaminant + contam_noisy + other,
+           FP_NC = ref_noisy) %>%
+    select(1, TP, FN, FP, FP_NC)
   
   seq_stats <- seq_stats %>%
     mutate(recall = 100 * TP / (TP + FN),
-           precision = 100 * TP / (TP + FP)) %>%
+           precision = 100 * TP / (TP + FP),
+           precision_NC = 100 * TP / (TP + FP_NC)) %>%
     as.tibble()
   
   return(seq_stats)
