@@ -896,7 +896,7 @@ comp_bar_facet
 
 
 Plot alpha diversity.
-```{r create phyloseq}
+```{r alpha diversity}
 
 library("phyloseq")
 

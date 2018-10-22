@@ -580,7 +580,7 @@ comp_bar_facet
 
 
 Plot alpha diversity.
-```{r create phyloseq}
+```{r alpha diversity}
 
 library("phyloseq")
 
@@ -615,7 +615,8 @@ alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Shannon", "Simp
                      aes(x = method, group = dataset)) +
   geom_point(aes(y = diversity, color = dataset), size = 2.5) +
   scale_color_manual(values = alpha_colors) +
-  facet_wrap(~alpha_index, nrow = 1, scales = "free_y")
+  facet_wrap(~alpha_index, nrow = 1, scales = "free_y") +
+  big_labels(legend.position = "top")
 alpha_dots
 
 
