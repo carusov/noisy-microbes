@@ -22,6 +22,7 @@ library(RColorBrewer)
 
 options(tibble.print_min = 100, tibble.print_max = 40)
 
+data_path <- "~/thesis/data"
 result_path <- "~/thesis/results/high_biomass"
 ref_path <- "~/thesis/references"
 analysis_path <- "~/thesis/analysis/high_biomass"
@@ -125,15 +126,54 @@ ref_seqs <- lapply(ref_fastas, function(f){
   return(seqs)
 })
 
-ref_strains <- list()
-ref_strains$zymo <- sapply(str_split(names(ref_seqs$zymo), "_16S"), `[`, 1)
-ref_strains$kozich <- lapply(str_split(names(ref_seqs$kozich), "\\."), `[`, 1:2) 
-ref_strains$kozich <- sapply(ref_strains$kozich, paste0, collapse = ".")
-ref_strains$schirmer <- names(ref_seqs$schirmer)
-ref_strains$damore <- names(ref_seqs$damore)
+names(ref_seqs$zymo) <- str_replace(names(ref_seqs$zymo), "_16S.*", "")
+names(ref_seqs$kozich) <- str_replace(names(ref_seqs$kozich), "\\.\\d+$", "")
 
 ref_dist_tables <- mapply(compute_ref_dist, dataset_tables, ref_seqs, SIMPLIFY = FALSE)
-strain_dist_tables <- mapply(collapse_group_dist, ref_dist_tables, ref_strains, SIMPLIFY = FALSE)
+strain_dist_tables <- mapply(collapse_group_dist, ref_dist_tables, lapply(ref_seqs, names), SIMPLIFY = FALSE)
+
+```
+
+
+Check to see if any reference strains are completely absent from the dataset.
+```{r missing strains}
+
+# Start with just those reference strains not detected by any method
+undetected <- lapply(strain_dist_tables, function(st){
+  missing <- apply(st, 2, min) > 0
+  missing <- names(missing[missing])
+  return(missing)
+})
+
+# Get the corresponding reference sequences
+undetected_refs <- mapply(function(refs, und){
+  refs <- refs[names(refs) %in% und]
+}, ref_seqs, undetected)
+
+# Read in the (cleaned) fastq data
+zymo_data <- "zymo_neat/filtered/pooled_filtered.fastq"
+kozich_data <- "kozich_130403/filtered/pooled_filtered.fastq"
+schirmer_data <- "schirmer_balanced/filtered/pooled_filtered.fastq"
+damore_data <- "damore_uneven/filtered/pooled_filtered.fastq"
+data_fastqs <- list("zymo" = zymo_data, "kozich" = kozich_data, "schirmer" = schirmer_data, "damore" = damore_data)
+
+data_seqs <- lapply(data_fastqs, function(f){
+  fp <- file.path(data_path, f)
+  seqs <- derepFastq(fp, verbose = TRUE)
+  seqs <- names(seqs$uniques)
+  return(seqs)
+})
+
+missing_strains <- mapply(get_missing_strains, data_seqs, undetected_refs)
+
+# Remove missing references from the reference set and ref_dist_tables
+ref_seqs <- mapply(function(refs, missing){
+  return(refs[!names(refs) %in% missing])
+}, ref_seqs, missing_strains)
+
+ref_dist_tables <- mapply(function(rdist, missing){
+  return(rdist[, !colnames(rdist) %in% missing])
+}, ref_dist_tables, missing_strains)
 
 ```
 
@@ -241,7 +281,7 @@ Compute a table of sequence summaries for each method.
 ```{r compute sequence summaries}
 
 
-dataset_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_strains,
+dataset_summary <- mapply(summarize_seqs, dataset_tables, ref_dist_tables, ref_seqs,
                               MoreArgs = list(sample_names = methods, max_dist = max_dist),
                               SIMPLIFY = FALSE)
 dataset_summary <- lapply(dataset_summary, function(ds){
@@ -259,7 +299,7 @@ dataset_summary_short <- lapply(dataset_summary, function(ds){
 })
 
 write_tables(dataset_summary, file.path(analysis_path, "summary", "dataset_summary_tables.tsv"))
-write_tables(dataset_summary_short, file.path(analysis_path, "summary", "dataset_summary_short_tables.tsv"), compact = TRUE)
+write_tables(dataset_summary_short, file.path(analysis_path, "summary", "dataset_summary_short_tables.tsv"), compact = FALSE)
 
 
 ```
@@ -316,6 +356,29 @@ write_tsv(dataset_ref_perc, file.path(analysis_path, "summary", "dataset_ref_per
 ```
 
 
+Add a column that assigns a color code to each sequence
+```{r add color column}
+
+library(RColorBrewer)
+
+ref_colors <- brewer.pal(8, "Dark2") %>% rev()
+ref_colors <- c(brewer.pal(8, "Dark2") %>% rev(), brewer.pal(9, "Set1"), brewer.pal(8, "Accent") %>% rev(),
+                brewer.pal(8, "Set2"), brewer.pal(12, "Paired"), brewer.pal(12, "Set3"), brewer.pal(11, "Spectral"))
+ref_colors <- c(ref_colors, brewer.pal(3, "Set1"))
+max_contams <- max(sapply(dataset_tables, function(mt) nrow(mt[!mt$reference,])))
+other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), size = max_contams, replace = TRUE)
+other_colors <- rep("#000000", times = max(sapply(dataset_tables, function(dt) nrow(dt[!dt$reference,]))))
+
+dataset_tables <- lapply(dataset_tables, function(dt){
+  dt$color <- character(length = nrow(dt))
+  dt$color[dt$reference] <- ref_colors[1:nrow(dt[dt$reference,])]
+  dt$color[!dt$reference] <- other_colors[1:nrow(dt[!dt$reference,])]
+  return(dt)
+})
+
+```
+
+
 Reformat annotated sequence tables for plotting with `ggplot`.
 ```{r prep for ggplot}
 
@@ -327,13 +390,19 @@ all_table_gg$dataset <- factor(all_table_gg$dataset, levels = c("zymo", "kozich"
 all_table_gg$method <- factor(all_table_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2"),
                               labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2"))
 
-all_table_gg <- all_table_gg %>% filter(count > 0)
-
 all_table_gg <- annotate_norms(all_table_gg, group = c("dataset", "method"))
 
 # add some grouping variables for plotting convenience
 all_table_gg <- all_table_gg %>% mutate(algorithm = method)
 levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "MED", EM = c("UNOISE", "Deblur", "DADA2"))
+
+# Grab an arbitrary zero-count, non-Reference row from Zymo for Deblur, to use as a filler
+# This will be used for the SNR boxplot, since Deblur had no non-Reference sequences for Zymo
+deblur_zero <- all_table_gg %>% filter(method == "Deblur", dataset == "Zymo", count == 0, class != "reference") %>% .[1, ]
+deblur_zero$count <- 1
+
+# Remove zero-count rows
+all_table_gg <- all_table_gg %>% filter(count > 0)
 
 ```
 
@@ -342,6 +411,8 @@ levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "M
 
 Plot the sequence-level composition of samples by sequence class.
 ```{r class seqs composition}
+
+library(ggpubr)
 
 # library(devtools)
 # unloadNamespace("ggbeeswarm")
@@ -376,15 +447,33 @@ class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
 # library(tidyverse)
 
 class_seqs_comp <- ggplot(all_table_gg, aes(x = method)) +
-  geom_bar(aes(fill = fct_rev(class)), width = 0.8) +
+  geom_bar(aes(fill = fct_rev(class)), width = 0.65) +
   facet_wrap(~dataset) +
-  scale_fill_manual(name = "Sequence class   ", values = rev(class_colors), labels = paste(rev(classes), "   ")) +
-  labs(x = "method", y = "number of sequences") +
+  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = paste(rev(classes), "   ")) +
+  labs(x = "", y = "number of ASVs/OTUs") +
   big_labels(title = 72, text = 60, legend.position = "top") +
   theme(panel.spacing = unit(3, "lines"), 
         legend.margin = margin(b = 90)) +
   guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
 class_seqs_comp
+
+
+class_reads_comp <- ggplot(all_table_gg, aes(x = method)) +
+  geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.65) +
+  scale_fill_manual(name = "ASV/OTU class", values = rev(class_colors),
+                    guide = guide_legend(reverse = FALSE)) +
+  facet_wrap(~dataset) +
+  # labs(title = "Read-level composition by sequence class",
+  labs(x = "method", y = "fraction of sample") +
+  big_labels(title = 72, text = 60, legend.position = "top") +
+  theme(panel.spacing = unit(3, "lines"), 
+        legend.margin = margin(b = 90)) +
+  # guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
+  guides(fill = FALSE)
+class_reads_comp
+
+ggarrange(class_seqs_comp, class_reads_comp, labels = c("A", "B"), vjust = c(1.5, 0.5), nrow = 2, 
+          font.label = list(size = 96), heights = c(5, 4))
 
 # class_counts <- all_table_gg %>% 
 #   filter(count > 0) %>%
@@ -426,6 +515,66 @@ Plot the read-level composition of samples by sequence class.
 #        subtitle = "", y = "relative abundance") +
 #   big_labels(angle = 30, hjust = 0.7, vjust = 0.7, legend.position = "right")
 # class_reads_comp_dataset
+
+```
+
+
+Create plot to show sample composition, colored by reference vs. non-reference.
+```{r composition plot}
+
+mname = "UCLUST"
+
+set.seed(444)
+# data_table <- method_tables[[tolower(mname)]]
+# data_gg <- all_table_gg %>% filter(method == mname)
+
+
+# ref_colors <- brewer.pal(sum(data_table$reference), "Dark2") %>% rev()
+# ref_colors <- brewer.pal(8, "Dark2") %>% rev()
+# ref_colors <- c(ref_colors, brewer.pal(3, "Set1")[1])
+# other_colors <- sample(grey.colors(5, start = 0.5, end = 0.9), sum(!data_table$reference), replace = TRUE)
+
+# data_table$color <- rep(NA, nrow(data_table))
+# data_table$color[data_table$reference] <- ref_colors
+# data_table$color[!data_table$reference] <- other_colors
+
+# color_gg <- data_table %>% select(id, sample_names, color) %>% gather("sample", "count", sample_names)
+# data_gg <- inner_join(data_gg, color_gg)
+# data_gg <- data_table %>% gather("sample", "count", sample_names)
+
+comp_bar <- ggplot(all_table_gg %>% filter(method == mname), aes(x = sample, y = count)) +
+  geom_col(aes(fill = color, group = reference), width = 0.5, position = position_fill()) +  #alpha = ifelse(reference, "bright", "dull")), 
+  scale_fill_identity(name = "Organism", guide = "legend", 
+                      labels = c(paste("Ref", 1:8), rep("non-Ref", length(other_colors))), 
+                      breaks = c(ref_colors, other_colors)) +
+  scale_x_discrete(labels = dilution_labels) +
+  labs(title = "Relative composition of dilution series samples", 
+       subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "fraction of sample") +
+  theme(legend.position = "right", legend.title = element_text(size = 12), 
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(size = 20))
+comp_bar
+comp_bar + coord_polar(theta = "y", start = 0)
+
+comp_bar_facet <- ggplot(all_table_gg, aes(x = method, y = count)) +
+  geom_col(aes(fill = color, group = reference), width = 0.5, position = position_fill()) +
+  scale_fill_identity(name = "ASV/OTU", guide = "legend",
+                      labels = c(paste("Ref", 1:58), rep("non-Ref", length(other_colors))),
+                      breaks = c(ref_colors[1:58], other_colors)) +
+  scale_x_discrete(labels = methods) +
+  facet_wrap(~dataset) +
+  # labs(title = "Composition of high biomass samples", 
+       labs(x = "method", y = "fraction of sample") +
+  theme(legend.position = "right",
+        legend.title = element_text(face = "bold", size = 12), 
+        axis.text = element_text(size = 12),
+        axis.title = element_text(face = "bold", size = 16),
+        plot.title = element_text(size = 20),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        strip.text = element_text(size = 16),
+        panel.spacing = unit(1, "lines"))
+comp_bar_facet
 
 ```
 
@@ -472,11 +621,11 @@ library(scales)
 #   big_labels()
 # snr_box
 
-snr_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0)) +
+snr_box_facet <- ggplot(data = rbind(all_table_gg, deblur_zero)) +
   geom_boxplot(aes(x = method, y = count, fill = factor(reference, levels = c(TRUE, FALSE))),
                outlier.size = 3, outlier.stroke = 1, size = 1.5) +
   labs(x = "method", y = expression(bold("log"[10]*" abundance"))) +
-  scale_fill_manual(name = "Sequence class   ", 
+  scale_fill_manual(name = "ASV/OTU class   ", 
                     labels = paste(c(" Reference", " non-Reference"), "   "), 
                     values = c("blue", "orange")) +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
