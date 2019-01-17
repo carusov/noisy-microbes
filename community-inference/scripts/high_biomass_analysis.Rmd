@@ -27,7 +27,7 @@ result_path <- "~/thesis/results/high_biomass"
 ref_path <- "~/thesis/references"
 analysis_path <- "~/thesis/analysis/high_biomass"
 script_path <- "~/thesis/noisy-microbes/community-inference/scripts"
-plot_path <- "~/thesis/analysis/plots"
+plot_path <- "~/thesis/analysis/high_biomass/plots/manuscript"
 
 source(file.path(script_path, "seq_table_processing.R"))
 
@@ -396,7 +396,7 @@ all_table_gg <- annotate_norms(all_table_gg, group = c("dataset", "method"))
 all_table_gg <- all_table_gg %>% mutate(algorithm = method)
 levels(all_table_gg$algorithm) <- list(OTU = c("UCLUST", "UPARSE"), entropy = "MED", EM = c("UNOISE", "Deblur", "DADA2"))
 
-# Grab an arbitrary zero-count, non-Reference row from Zymo for Deblur, to use as a filler
+# Grab an arbitrary zero-count, non-Reference row from Zymo for Deblur, to use as a dummy filler
 # This will be used for the SNR boxplot, since Deblur had no non-Reference sequences for Zymo
 deblur_zero <- all_table_gg %>% filter(method == "Deblur", dataset == "Zymo", count == 0, class != "reference") %>% .[1, ]
 deblur_zero$count <- 1
@@ -448,9 +448,9 @@ class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
 
 class_seqs_comp <- ggplot(all_table_gg, aes(x = method)) +
   geom_bar(aes(fill = fct_rev(class)), width = 0.65) +
-  facet_wrap(~dataset) +
+  facet_wrap(~dataset, scales = "free_y") +
   scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = paste(rev(classes), "   ")) +
-  labs(x = "", y = "number of ASVs/OTUs") +
+  labs(x = "method", y = "number of ASVs/OTUs") +
   big_labels(title = 72, text = 60, legend.position = "top") +
   theme(panel.spacing = unit(3, "lines"), 
         legend.margin = margin(b = 90)) +
@@ -460,7 +460,8 @@ class_seqs_comp
 
 class_reads_comp <- ggplot(all_table_gg, aes(x = method)) +
   geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.65) +
-  scale_fill_manual(name = "ASV/OTU class", values = rev(class_colors),
+  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), 
+                    labels = paste(rev(classes), "   "),
                     guide = guide_legend(reverse = FALSE)) +
   facet_wrap(~dataset) +
   # labs(title = "Read-level composition by sequence class",
@@ -522,7 +523,7 @@ Plot the read-level composition of samples by sequence class.
 Create plot to show sample composition, colored by reference vs. non-reference.
 ```{r composition plot}
 
-mname = "UCLUST"
+dname = "Zymo"
 
 set.seed(444)
 # data_table <- method_tables[[tolower(mname)]]
@@ -542,14 +543,15 @@ set.seed(444)
 # data_gg <- inner_join(data_gg, color_gg)
 # data_gg <- data_table %>% gather("sample", "count", sample_names)
 
-comp_bar <- ggplot(all_table_gg %>% filter(method == mname), aes(x = sample, y = count)) +
+comp_bar <- ggplot(all_table_gg %>% filter(dataset == dname), aes(x = method, y = count)) +
   geom_col(aes(fill = color, group = reference), width = 0.5, position = position_fill()) +  #alpha = ifelse(reference, "bright", "dull")), 
-  scale_fill_identity(name = "Organism", guide = "legend", 
-                      labels = c(paste("Ref", 1:8), rep("non-Ref", length(other_colors))), 
-                      breaks = c(ref_colors, other_colors)) +
-  scale_x_discrete(labels = dilution_labels) +
-  labs(title = "Relative composition of dilution series samples", 
-       subtitle = paste("Dilution series processed with", mname), x = "sample dilution", y = "fraction of sample") +
+  scale_fill_identity(name = "ASV/OTU", guide = "legend", 
+                      labels = c(paste("Ref", 1:9), rep("non-Ref", length(other_colors))), 
+                      breaks = c(ref_colors[1:9], other_colors)) +
+  scale_x_discrete(labels = methods) +
+  labs(title = paste("Relative composition of ", dname, " dataset processed with different methods"), 
+       # subtitle = paste("Dilution series processed with", mname), 
+       x = "ASV/OTU method", y = "fraction of sample") +
   theme(legend.position = "right", legend.title = element_text(size = 12), 
         axis.text = element_text(size = 12),
         axis.title = element_text(size = 16),
@@ -579,6 +581,36 @@ comp_bar_facet
 ```
 
 
+Calculate expected proportions of each strain in each dataset sample, for use in expected alpha diversity calculations.
+```{r reference proportions}
+
+damore_dist_file <- "damore_proportions.tsv"
+
+ref_props <- lapply(ref_seqs, function(rs){
+  n_strains <- length(unique(names(rs)))
+  props <- 10000 * rep(1 / n_strains, times = n_strains)
+})
+
+damore_props <- read_tsv(file.path(ref_path, damore_prop_file), col_names = c("name", "proportion"))
+damore_props$name <- sapply(str_split(damore_props$name, " +"), paste, collapse = "_")
+damore_props <- damore_props[damore_props$name %in% names(ref_seqs$damore), ]
+damore_props$proportion <- 100 * damore_props$proportion
+
+ref_props$damore <- damore_props$proportion
+
+# construct table of expected strain proportions
+max_refs <- max(sapply(ref_props, length))
+ref_props <- lapply(ref_props, function(rp){
+  rp <- as.integer(rp)
+  length(rp) <- max_refs
+  rp[is.na(rp)] <- 0
+  return(rp)
+  })
+ref_props <- do.call("cbind", ref_props) 
+
+```
+
+
 Plot alpha diversity.
 ```{r alpha diversity}
 
@@ -597,10 +629,12 @@ otu_tabs <- lapply(seq_mats, otu_table, taxa_are_rows = TRUE)
 
 # construct phyloseq objects
 physeqs <- lapply(otu_tabs, phyloseq)
+phy_exp <- phyloseq(otu_table(ref_props, taxa_are_rows = TRUE))
 
 # compute alpha diversity
-alpha_indices <- c("Chao1", "Shannon", "Simpson", "InvSimpson", "Fisher")
+alpha_indices <- c("Shannon", "InvSimpson", "Fisher")
 alpha_div <- lapply(physeqs, estimate_richness, measures = alpha_indices)
+alpha_exp <- estimate_richness(phy_exp, measures = alpha_indices)
 
 # combine alpha diversity tables into one table for plotting
 alpha_div <- lapply(alpha_div, rownames_to_column, var = "method")
@@ -609,16 +643,46 @@ alpha_div_gg <- lapply(alpha_div, gather, key = "alpha_index", value = "diversit
 alpha_div_gg <- do.call("rbind", alpha_div_gg) %>% 
   mutate(dataset = rep(datasets, each = length(methods) * length(alpha_indices)))
 
-alpha_colors <- brewer.pal(12, "Paired")[c(2, 3, 9, 8)]
+alpha_exp <- rownames_to_column(alpha_exp, var = "dataset") %>% as.tibble()
+alpha_exp_gg <- gather(alpha_exp, key = "alpha_index", value = "diversity", alpha_indices) %>%
+  mutate(method = "expected") %>% select(method, alpha_index, diversity, dataset)
 
-alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Shannon", "Simpson", "InvSimpson", "Fisher")), 
-                     aes(x = method, group = dataset)) +
-  geom_point(aes(y = diversity, color = dataset), size = 2.5) +
-  scale_color_manual(values = alpha_colors) +
+alpha_div_gg <- rbind(alpha_div_gg, alpha_exp_gg)
+
+alpha_div_gg$dataset <- factor(alpha_div_gg$dataset, levels = c("zymo", "kozich", "schirmer", "damore"),
+                               labels = c("Zymo", "Kozich", "Schirmer", "D'Amore"))
+alpha_div_gg$method <- factor(alpha_div_gg$method, levels = c("uclust", "uparse", "med", "unoise", "deblur", "dada2", "expected"),
+                              labels = c("UCLUST", "UPARSE", "MED", "UNOISE", "Deblur", "DADA2", "Expected"))
+alpha_div_gg$alpha_index <- factor(alpha_div_gg$alpha_index, levels = alpha_indices,
+                                   labels = c("Shannon", "Inverse Simpson", "Fisher"))
+alpha_div_gg <- alpha_div_gg %>% mutate(expected = method == "Expected")
+
+
+alpha_colors <- brewer.pal(12, "Paired")[c(2, 4, 9, 8)]
+
+alpha_dots <- ggplot(alpha_div_gg %>% filter(alpha_index %in% c("Shannon", "Inverse Simpson", "Fisher")),
+                                             # method != "Expected"), 
+                     aes(x = method, shape = expected)) +
+  geom_point(aes(y = diversity, fill = dataset, color = expected), size = 18, stroke = 4) +
+  # geom_point(aes(y = diversity, color = dataset), size = 3) +
+  # geom_hline(data = alpha_div_gg %>% filter(method == "Expected"), 
+  #            aes(yintercept = diversity, color = dataset), size = 4, show.legend = TRUE) +
+  labs(y = "alpha diversity") +
+  # scale_color_manual(name = "Dataset  ", values = alpha_colors, labels = paste(levels(alpha_div_gg$dataset), "   ")) +
+  scale_fill_manual(name = "Dataset  ", values = alpha_colors, labels = paste(levels(alpha_div_gg$dataset), "  "), guide = T) +
+  scale_shape_manual(name = " Source  ", values = c(21, 24), labels = paste(c("Data", "Expected"), "  ")) +
+  scale_color_manual(values = c("white", "black"), guide = FALSE) +
   facet_wrap(~alpha_index, nrow = 1, scales = "free_y") +
-  big_labels(legend.position = "top")
+  big_labels(title = 72, text = 60, legend.position = "top") +
+  # big_labels(legend.position = "top") +
+  guides(fill = guide_legend(keywidth = 6, keyheight = 6, override.aes = list(shape = 21, color = "white")), 
+         shape = guide_legend(keywidth = 6, keyheight = 6)) +
+  theme(axis.title.y = element_text(vjust = 1),
+        legend.margin = margin(b = 90),
+        plot.margin = unit(c(4, 0, 2, 0), "lines")) 
 alpha_dots
 
+ggsave("high_alpha.png", device = "png", path = plot_path, width = 7.5, height = 5.9, units = "in", dpi = 600)
 
 ```
 
@@ -665,20 +729,42 @@ library(scales)
 #   big_labels()
 # snr_box
 
-snr_box_facet <- ggplot(data = rbind(all_table_gg, deblur_zero)) +
-  geom_boxplot(aes(x = method, y = count, fill = factor(reference, levels = c(TRUE, FALSE))),
-               outlier.size = 3, outlier.stroke = 1, size = 1.5) +
-  labs(x = "method", y = expression(bold("log"[10]*" abundance"))) +
+(snr_box_facet <- ggplot(data = rbind(all_table_gg, deblur_zero),
+                        aes(x = method, y = count)) +
+  geom_boxplot(aes(fill = factor(reference, levels = c(TRUE, FALSE))),
+               # outlier.size = 3, outlier.stroke = 1, size = 1.5) +
+               outlier.size = 0., outlier.color = "white", 
+               size = 0.8, alpha = 1) +
   scale_fill_manual(name = "ASV/OTU class   ", 
                     labels = paste(c(" Reference", " non-Reference"), "   "), 
                     values = c("blue", "orange")) +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-        labels = trans_format("log10", math_format(10^.x))) +
+  new_scale_fill() +
+  geom_jitter(aes(fill = factor(reference, levels = c(TRUE, FALSE))),
+              position = position_jitterdodge(jitter.width = 0.15, jitter.height = 0.),
+              shape = 21, size = 1.6, stroke = 0.8, color = "black", alpha = 0.7, show.legend = FALSE) +
+  scale_fill_manual(values = c("deepskyblue", "gold1")) +
   facet_wrap(~dataset) +
-  big_labels(title = 72, text = 60, legend.position = "top") +
-  theme(panel.spacing = unit(3, "lines"),
-        legend.margin = margin(b = 90)) +
-  guides(fill = guide_legend(keywidth = 6, keyheight = 9))
+  labs(x = "method", y = expression(bold("log"[10]*" abundance"))) +
+  # scale_color_manual(values = c("blue", "orange"), guide = FALSE) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+        labels = trans_format("log10", math_format(10^.x))
+        # limits = c(10^0, max(all_table_gg$count))
+        ) +
+  big_labels(title = 36, text = 30, legend.position = "top") +
+  theme(panel.spacing = unit(1.5, "lines"),
+        legend.margin = margin(b = 45)) +
+  guides(fill = guide_legend(keywidth = 3, keyheight = 4.5)) +
+  # big_labels(title = 16, text = 14, legend.position = "top") +
+  # theme(panel.spacing = unit(0.5, "lines"),
+  #       legend.margin = margin(b = 10)) +
+  # guides(fill = guide_legend(keywidth = 1, keyheight = 1, override.aes = list(alpha = 1))) +
+  geom_line(aes(x=x, y=y), 
+            data=data.frame(x=c(4.5, 5.5),y=rep(1,2),dataset="Zymo"), 
+            size = 3, 
+            col='white') +
+  geom_line(aes(x=x, y=y),
+            data=data.frame(x=c(4.5, 5.5), y=rep(1, 2), dataset="Zymo"),
+            size=0.5, alpha=0.4, col='grey'))
 snr_box_facet
 
 
