@@ -32,6 +32,7 @@ ref_path <- "~/thesis/references"
 # zymo_ref <- file.path(ref_path, "zymo_SSU")
 analysis_path <- "~/thesis/analysis/dilution_separate"
 script_path <- "~/thesis/noisy-microbes/community-inference/scripts"
+plot_path <- file.path(analysis_path, "plots", "manuscript")
 
 source(file.path(script_path, "seq_table_processing.R"))
 
@@ -560,35 +561,34 @@ classes = levels(all_table_gg$class)
 class_seqs_comp <- ggplot(all_table_gg, aes(x = sample)) +
   geom_bar(aes(fill = fct_rev(class)), width = 0.7) +
   facet_wrap(~method) +
-  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = paste(rev(classes), "  ")) +
+  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = rev(classes)) +
   scale_x_discrete(labels = dilution_labels) +
   # labs(title = "Composition of dilution series communities by sequence class", subtitle = "", 
   labs(x = "", y = "number of ASVs/OTUs") +
-  big_labels(title = 16, text = 12, legend.position = "top") +
-  theme(panel.spacing = unit(0.5, "lines"), 
-        legend.margin = margin(b = 10)) +
+  big_labels() +
+  theme(plot.margin = margin(0, 2, 0, 2)) +
   guides(fill = guide_legend(reverse = TRUE, keywidth = 1, keyheight = 1))
 class_seqs_comp
-
 
 class_reads_comp <- ggplot(all_table_gg, aes(x = sample)) +
   geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.7) +
   scale_x_discrete(labels = dilution_labels) +
-  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = paste(rev(classes), "  ")) +
+  scale_fill_manual(name = "ASV/OTU class   ", values = rev(class_colors), labels = rev(classes)) +
   facet_wrap(~method, nrow = 2) +
   # labs(title = "Read-level composition by sequence class across dilution series", subtitle = "", 
   labs(x = "sample dilution", y = "fraction of sample") +
   # big_labels(title = 72, text = 60, legend.position = "top") +
-  big_labels(title = 16, text = 12, legend.position = "top") +
-  theme(panel.spacing = unit(0.5, "lines"),
-        legend.margin = margin(b = 10)) +
+  big_labels(title = 10, text = 9, legend.position = "top") +
+  theme(plot.margin = margin(6, 2, 0, 2)) +
   guides(fill = FALSE)
   # guides(fill = guide_legend(reverse = TRUE, keywidth = 4.5, keyheight = 4.5))
 class_reads_comp
 
-ggarrange(class_seqs_comp, class_reads_comp, labels = c("A", "B"), vjust = c(1.5, 0.5), nrow = 2, 
-          font.label = list(size = 24), heights = c(5, 4))
+(class_comp_combined <- ggarrange(class_seqs_comp, class_reads_comp, labels = c("A", "B"), vjust = c(2.0, 0.5), nrow = 2, 
+                                 font.label = list(size = 16), heights = c(5, 4.5)))
 
+ggsave("dilution_compositions_combined.tif", plot = class_comp_combined, device = "tiff", path = plot_path, 
+       width = 6.87, height = 8.0, units = "in", dpi = 300)
 
 ```
 
@@ -602,7 +602,7 @@ Plot the read-level composition of samples by sequence class.
 # class_colors <- brewer.pal(12, "Paired")[c(2, 1, 8, 7, 10)]
 # 
 # class_reads_comp_method <- ggplot(all_table_gg %>% filter(count > 0), aes(x = sample)) +
-#   geom_col(aes(y = count, fill = fct_rev(class)), position = position_fill(), width = 0.7) +
+#   geom_col(aes(y = count, fill = fct_rev(class)4), position = position_fill(), width = 0.7) +
 #   scale_x_discrete(labels = dilution_labels) +
 #   scale_fill_manual(name = "Sequence class   ", values = rev(class_colors), labels = paste(rev(classes), "  ")) +
 #   facet_wrap(~method, nrow = 2) +
@@ -653,31 +653,34 @@ ref_class_colors <- brewer.pal(12, "Paired")[c(2, 1)] #, brewer.pal(8, "Dark2")[
 contam_colors <- brewer.pal(12, "Paired")[c(8, 7, 10)]
 
 
-reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", ref_like, "count", size = 1) +
+reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", ref_like, "count", size = 0.7) +
   scale_color_manual(name = "ASV/OTU class   ", values = ref_class_colors, labels = paste(classes[1:2], "   ")) +
-  labs(x = "", y = "number of ASVs/OTUs") +
+  labs(y = "number of ASVs/OTUs") +
   facet_wrap(~method) +
-  big_labels(title = 16, text = 12, legend.position = "top") +
-  theme(panel.spacing = unit(0.5, "lines"),
-        legend.margin = margin(b = 10),
-        plot.margin = unit(c(2, 0, 1, 0), "lines")) +
-  guides(color = guide_legend(keywidth = 2))
+  big_labels() +
+  theme(axis.title.x = element_blank(),
+        plot.margin = margin(0, 2, 0, 2),
+        legend.box.margin = margin(0, 0, -4, 0)) +
+  guides(color = guide_legend(keywidth = 1.5))
 reflike_seq_lines
 
-non_reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", !ref_like, "count", size = 1) +
+non_reflike_seq_lines <- dilution_line_plot(all_table_gg, "class", !ref_like, "count", size = 0.7) +
   scale_color_manual(name = "ASV/OTU class   ", values = contam_colors, labels = paste(classes[3:5], "   ")) +
   labs(x = "sample dilution", y = "number of ASVs/OTUs") +
   facet_wrap(~method) +
-  big_labels(title = 16, text = 12, legend.position = "top") +
-  theme(panel.spacing = unit(0.5, "lines"),
-        legend.margin = margin(b = 10),
-        plot.margin = unit(c(1, 0, 2, 0), "lines")) +
-  guides(color = guide_legend(keywidth = 2))
+  big_labels() +
+  theme(legend.box.margin = margin(0, 0, -4, 0),
+        plot.margin = margin(6, 2, 0, 2)) +
+  guides(color = guide_legend(keywidth = 1.5))
 non_reflike_seq_lines
 
-ggarrange(reflike_seq_lines, non_reflike_seq_lines, labels = c("A", "B"), nrow = 2, font.label = list(size = 24))
+(all_seq_lines <- ggarrange(reflike_seq_lines, non_reflike_seq_lines, labels = c("A", "B"), 
+                           vjust = c(1.7, 2.0), nrow = 2, font.label = list(size = 16)))
 
-# contam_like_seq_lines <- dilution_line_plot(all_table_gg, "class", contaminant | contam_noisy, stat = "count", size = 1) +
+ggsave("all_seq_lines.tif", plot = all_seq_lines, device = "tiff", path = plot_path, 
+       width = 6.87, height = 8.0, units = "in", dpi = 300)
+
+  # contam_like_seq_lines <- dilution_line_plot(all_table_gg, "class", contaminant | contam_noisy, stat = "count", size = 1) +
 #   scale_color_manual(name = "Sequence class   ", values = class_colors[c(3, 5)], labels = paste(classes[3:4], "   ")) +
 #   ylab("sequences") +
 #   facet_wrap(~method) +
@@ -746,37 +749,32 @@ library(ggnewscale)
                         aes(x = sample, y = count)) +
   geom_boxplot(aes(fill = factor(reference, levels = c(TRUE, FALSE))),
                outlier.size = 0, #outlier.stroke = 1, size = 1.5
-               size = 0.8, alpha = 1) +
-  scale_fill_manual(name = "Sequence class   ", 
-                    labels = paste(c(" Reference", " non-Reference"), "   "), 
+               size = 0.3, alpha = 1) +
+  scale_fill_manual(name = "Sequence class", 
+                    labels = c("Reference", "non-Reference"), 
                     values = c("blue", "orange")) +
   new_scale_fill() +
   geom_jitter(aes(fill = factor(reference, levels = c(TRUE, FALSE))),
               position = position_jitterdodge(jitter.width = 0.15, jitter.height = 0.), 
-              shape = 21, size = 1.6, stroke = 0.8, color = "black", alpha = 1, show.legend = FALSE) +
+              shape = 21, size = 0.5, stroke = 0.25, color = "black", alpha = 1, show.legend = FALSE) +
   scale_fill_manual(values = c("deepskyblue", "gold1")) +
-  # scale_color_manual(values = c("black", "black"), guide = FALSE) +
   facet_wrap(~factor(method), nrow = 3, dir = "v") +
   labs(x = "dilution", y = expression(bold("log"[10]*" abundance"))) +
   scale_x_discrete(labels = dilution_labels) +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
         labels = trans_format("log10", math_format(10^.x))) +
-  big_labels(title = 36, text = 30, legend.position = "top") +
-  theme(panel.spacing = unit(1.5, "lines"),
-        legend.margin = margin(b = 45)) +
-  guides(fill = guide_legend(keywidth = 3, keyheight = 4.5)) +
-  # big_labels(title = 16, text = 12, legend.position = "top") +
-  # theme(panel.spacing = unit(0.5, "lines"),
-  #       legend.margin = margin(b = 10)) +
-  # guides(fill = guide_legend(keywidth = 1, keyheight = 1, override.aes = list(alpha = 1))) +
+  big_labels() +
+  # guides(fill = guide_legend(keywidth = 1, keyheight = 10)) +
   geom_line(aes(x=x, y=y),  # cover up the dummy value for Deblur
             data=data.frame(x=c(0.5, 1.5),y=rep(1,2),method="Deblur"),
-            size = 3,
+            size = 1,
             col='white') +
   geom_line(aes(x=x, y=y),  # redraw the covered grid line
             data=data.frame(x=c(0.5, 1.5), y=rep(1, 2), method="Deblur"),
             size=0.5, alpha=0.4, col='grey'))
-snr_box_facet
+
+ggsave("dilution_snr_box_jitter.tif", plot = snr_box_facet, device = "tiff", path = plot_path, 
+       width = 6.87, height = 8.0, units = "in", dpi = 300)
 
 # ref_contam_box_facet <- ggplot(data = all_table_gg %>% filter(count > 0, class %in% c("Reference", "Contaminant"))) +
 #   geom_boxplot(aes(x = sample, y = count, fill = class)) +
@@ -972,31 +970,26 @@ alpha_div_gg$alpha_index <- factor(alpha_div_gg$alpha_index, levels = alpha_indi
 
 method_colors <- brewer.pal(12, "Paired")[c(2, 3, 9, 7, 6, 12)]
 
-alpha_dots <- ggplot(alpha_div_gg %>% filter(method != "Expected", sample != "expected"),
+(alpha_dots_sample <- ggplot(alpha_div_gg %>% filter(method != "Expected", sample != "expected"),
                      aes(x = sample)) +
-  geom_point(aes(y = diversity, color = method), size = 18) +
+  geom_point(aes(y = diversity, color = method), size = 3) +
   geom_hline(data = alpha_div_gg %>% filter(sample == "expected"), 
              aes(yintercept = diversity), color = "black", show.legend = TRUE) +
-  geom_line(aes(y = diversity, color = method, group = method), size = 2) +
-  scale_color_manual(name = "Method  ", values = method_colors, labels = paste(levels(alpha_div_gg$method), "   ")) +
+  geom_line(aes(y = diversity, color = method, group = method), size = 0.5) +
+  scale_color_manual(name = "Method  ", values = method_colors, labels = levels(alpha_div_gg$method)) +
   scale_x_discrete(labels = dilution_labels) +
   labs(y = "alpha diversity") +
   facet_wrap(~alpha_index, nrow = 1, scales = "free_y") +
-  big_labels(title = 72, text = 60, legend.position = "top") +
-  guides(color = guide_legend(keywidth = 6, keyheight = 6, nrow = 1)) + 
-  theme(axis.title.y = element_text(vjust = 1),
-        legend.margin = margin(b = 90),
-        plot.margin = unit(c(4, 0, 2, 0), "lines")) 
-  # theme(axis.title.y = element_text(vjust = -1),
-        # legend.margin = margin(b = 90),
-        # plot.margin = unit(c(2, 0, 2, 0), "lines")) +
-  # guides(color = guide_legend(nrow = 1))
-alpha_dots
+  big_labels() +
+  guides(color = guide_legend(keywidth = 1.5, keyheight = 1, nrow = 1)))
+
+ggsave("dilution_alpha_sample_x.tif", plot = alpha_dots_sample, device = "tiff", path = plot_path, 
+       width = 6.87, height = 5.4, units = "in", dpi = 300)
 
 
 sample_colors <- rev(brewer.pal(9, "YlOrRd"))
 
-alpha_dots <- ggplot(alpha_div_gg %>% filter(method != "Expected", sample != "expected"),
+(alpha_dots_method <- ggplot(alpha_div_gg %>% filter(method != "Expected", sample != "expected"),
                      aes(x = method)) +
   geom_point(aes(y = diversity, color = sample), size = 3) +
   geom_hline(data = alpha_div_gg %>% filter(sample == "expected"), 
@@ -1009,8 +1002,7 @@ alpha_dots <- ggplot(alpha_div_gg %>% filter(method != "Expected", sample != "ex
   theme(axis.title.y = element_text(vjust = -1),
         # legend.margin = margin(b = 90),
         plot.margin = unit(c(2, 0, 2, 0), "lines")) +
-  guides(color = guide_legend(nrow = 1))
-alpha_dots
+  guides(color = guide_legend(nrow = 1)))
 
 ```
 
@@ -1032,30 +1024,21 @@ Plot number of inferred sequences for each sample and each method.
 # seqs_line_unnorm
 
 # normalized by median read count after processing by each method
-seqs_line_norm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs_norm_method_median)) +
-  geom_point(aes(color = method), size = 12) +
-  geom_line(aes(group = method, color = method), size = 4) +
+(seqs_line_norm <- ggplot(sample_counts_gg, aes(x = sample, y = seqs_norm_method_median)) +
+  geom_point(aes(color = method), size = 2) +
+  geom_line(aes(group = method, color = method), size = 0.7) +
   # labs(title = "Number of inferred sequences at each concentration by each method", 
   #      subtitle = "Normalized by median sample read count",
   labs(x = "sample dilution", y = "normalized number of ASVs/OTUs") +
-  scale_color_brewer(name = "Method   ", labels = paste(levels(sample_counts_gg$method), "   "), palette = "Dark2") +
+  scale_color_brewer(name = "Method   ", labels = levels(sample_counts_gg$method), palette = "Dark2") +
   scale_x_discrete(labels = dilution_labels) +
-  big_labels(title = 72, text = 60, legend.position = "top") +
-  theme(panel.spacing = unit(3, "lines"),
-        legend.margin = margin(b = 90),
-        plot.margin = unit(c(2, 0, 4, 0), "lines")) +
-  guides(color = guide_legend(nrow = 1, keywidth = 8))
-  # theme(legend.position = c(0.1, 0.6),
-  #       # legend.justification = c(0.5, 0.5),
-  #       legend.title = element_text(face = "bold", size = 16),
-  #       legend.text = element_text(size = 16),
-  #       legend.background = element_rect(color = "black", size = 0.25, linetype = "solid"),
-  #       legend.key.height = unit(20, "points"),
-  #       axis.title = element_text(face = "bold", size = 16),
-  #       axis.text = element_text(size = 14),
-  #       plot.title = element_text(hjust = 0.5, size = 20),
-  #       plot.subtitle = element_text(hjust = 0.5, size = 16))
-seqs_line_norm
+  big_labels() +
+  theme(legend.title = element_text(margin = margin(r = 2))) +
+  #       legend.text = element_text(margin = margin(r = 7))) +
+  guides(color = guide_legend(nrow = 1, keywidth = 1.5)))
+
+ggsave("dilution_seq_counts_norm.tif", plot = seqs_line_norm, device = "tiff", path = plot_path, 
+       width = 6.87, height = 5.4, units = "in", dpi = 300)
 
 # same plot as above, but only the first seven samples
 # seqs_line_norm_7 <- ggplot(sample_counts_gg[sample_counts_gg$sample %in% sample_names[1:7], ], aes(x = sample, y = seqs_norm_method_median)) +

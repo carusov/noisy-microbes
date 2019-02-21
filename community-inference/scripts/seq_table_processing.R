@@ -792,21 +792,26 @@ annotate_norms <- function(all_seq_table, group){
 theme_set(theme_bw())
 
 # function to define general theme parameters
-big_labels <- function(title = 16, text = 14, angle = 45, hjust = 1, vjust = 1, legend.position = "bottom", key.size = 1){
+big_labels <- function(title = 10, text = 9, angle = 45, hjust = 1, vjust = 1, legend.position = "top", key.size = 1){
   theme(axis.text.x = element_text(size = text, angle = angle, hjust = hjust, vjust = vjust),
         axis.text.y = element_text(size = text),
-        axis.title.y = element_text(margin = margin(r = 40)),
+        axis.title.x = element_text(margin = margin(t = 6)),
+        axis.title.y = element_text(margin = margin(r = 6)),
         plot.title = element_text(face = "bold", size = title, hjust = 0.5),
         plot.subtitle = element_text(size = title - 2, hjust = 0.5),
         axis.title = element_text(face = "bold", size = title),
         strip.text = element_text(size = title),
         legend.position = legend.position,
-        legend.justification = 0.5,
-        legend.title = element_text(face = "bold", size = title),
-        legend.text = element_text(size = title - 2, hjust = 1),
+        legend.justification = "center",
+        legend.title = element_text(face = "bold", size = title, margin = margin(r = 7)),
+        legend.text = element_text(size = text, margin = margin(l = 0, r = 7), hjust = 0),
         # legend.spacing.x = unit(1.5,"cm"),
         legend.key.size = unit(key.size, "lines"),
-        panel.border = element_rect(color = "black", fill = NA, size = 1)) 
+        legend.margin = margin(b = 0, t = 0),
+        legend.box.margin = margin(0, 0, 0, 0),
+        panel.spacing = unit(0.25, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = margin(2, 2, 2, 2)) 
 }
 
 # ref vs. non-ref beeswarm plots, log10 raw counts
