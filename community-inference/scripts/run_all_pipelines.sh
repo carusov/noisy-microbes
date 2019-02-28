@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 8/14/2017
@@ -10,15 +12,15 @@
 ### Usage: run_all_pipelines.sh
 
 # Set the default input, output, and reference directories
-#INDIR=~/thesis/data/dilution
+INDIR=""
 OUTDIR=results
 REFDIR=~/thesis/references
 
 # Set default sequence length and filtering parameters
-MIN_LEN=221
-MAX_LEN=225
 FTRUNC=230
 RTRUNC=210
+MIN_LEN=221
+MAX_LEN=225
 MAXEE_F=2.5
 MAXEE_R=2.5
 POOLED=false
@@ -41,12 +43,6 @@ do
 	-r|--ref)
 	    REFDIR="$2"
 	    shift;;
-	-f|--ftrunc)
-	    FTRUNC="$2"
-	    shift;;
-	-b|--rtrunc)
-	    RTRUNC="$2"
-	    shift;;
 	-s|--min_len)
 	    MIN_LEN="$2"
 	    shift;;
@@ -60,19 +56,17 @@ do
 	    MAXEE_R="$2"
 	    shift;;
 	-p|--pooled)
-	    POOLED=true
+	    POOLED=true;;
 	-h|--help)
 	    printf "\nUSAGE: run_all_pipelines.sh [-i --input input_directory] [options]\n"
 	    printf "\nOptions: \t[default]"
 	    printf "\n-o --output \t[./"$OUTDIR"] \t\t\t\toutput_directory"
 	    printf "\n-r --ref \t["$REFDIR"] \treference_directory"
-	    printf "\n-f --ftrunc \t["$FTRUNC"] \t\t\t\t\tforward_trunc_position"
-	    printf "\n-b --rtrunc \t["$RTRUNC"] \t\t\t\t\treverse_trunc_position"
 	    printf "\n-s --min_len \t["$MIN_LEN"] \t\t\t\t\tmin_merge_length"
 	    printf "\n-l --max_len \t["$MAX_LEN"] \t\t\t\t\tmax_merge_length"
 	    printf "\n-F --maxee_F \t["$MAXEE_F"] \t\t\t\t\tmax_ee_forward"
 	    printf "\n-R --maxee_R \t["$MAXEE_R"] \t\t\t\t\tmax_ee_reverse"
-	    printf "\n-m --mode \t["$MODE"] \t\t\t\tprocessing mode"
+	    printf "\n-p --pooled \t["$POOLED"] \t\t\t\tpooled_samples"
 	    printf "\n\n"
 	    exit;;
 	*)
@@ -100,7 +94,7 @@ printf "\nMinimum merge length: %d" $MIN_LEN
 printf "\nMaximum merge length: %d" $MAX_LEN
 printf "\nMaximum expected errors (DADA2 forward): %0.2f" $MAXEE_F
 printf "\nMaximum expected errors (DADA2 reverse): %0.2f" $MAXEE_R
-printf "\nProcessing mode: %s" "$MODE"
+printf "\nPooled samples: %s" "$POOLED"
 printf "\n\n"
 
 # First, make sure we have the latest version of the DADA2 script
@@ -111,13 +105,11 @@ rmd2r.R -i dada2_pipeline.Rmd
 popd
 
 # If pooled mode is selected, run 5 pipelines on the pooled fasta file
-#if [[ $MODE == pooled ]]
 if $POOLED
 then
-    run_6_pipelines.sh -q "$INDIR"/filtered/pooled/pooled_filtered.fastq \
+    run_5_pipelines.sh -q "$INDIR"/filtered/pooled/pooled_filtered.fastq \
 		       -a "$INDIR"/filtered/pooled/pooled_filtered.fasta \
-		       -o "$OUTDIR" \
-		       -g "$INDIR"/filtered/mothur.groups \
+		       -o "$OUTDIR"/ \
 		       -r "$INDIR"/merged/pooled/pooled_merged.fastq \
 		       -R "$REFDIR" \
 		       -t $MIN_LEN
@@ -126,26 +118,37 @@ then
     printf "\n######################################################################\n"
     printf "\nRunning the DADA2 pipeline...\n"
     printf "\n######################################################################\n"
-    Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR/dada2 \
+    Rscript "$SCRIPTS"/dada2_pipeline.R -i "$INDIR" -o "$OUTDIR"/dada2 \
 	    -s $MIN_LEN -l $MAX_LEN \
 	    -F $MAXEE_F -R $MAXEE_R \
 	    -p
 
-# If separate mode is selected, run five pipelines on each sample fasta separately
-#elif [[ $MODE == separate ]]
+# If pooled mode is not selected, run five pipelines on each sample fasta separately
 else
-    for s in $(ls "$INDIR"/filtered/separate | egrep '^s[0-9]{3}.*\.fastq');
+    if [[ $(ls "$INDIR"/filtered/*.fastq | wc -l) > 1 ]]
+    then
+	multi=true
+    else
+	multi=false
+    fi
+    
+    for s in "$INDIR"/filtered/*.fastq
     do
-	fname="${s%.fastq}"
-	sname="${s%_*.fastq}"
-	fastq="$s"
-	fasta="$fname".fasta
+	fastq=$(basename "$s")
+	fasta="${fastq/.fastq/.fasta}"
+    	sname="${fastq%_*}"
 	raw="$sname"_merged.fastq
 
-	run_6_pipelines.sh -q "$INDIR"/filtered/separate/"$fastq" \
-			   -a "$INDIR"/filtered/separate/"$fasta" \
-			   -o "$OUTDIR"/"$sname" \
-			   -g "$INDIR"/filtered/mothur.groups \
+	if $multi
+	then
+	    sample_outdir="$OUTDIR"/"$sname"
+	else
+	    sample_outdir="$OUTDIR"
+	fi
+
+	run_5_pipelines.sh -q "$INDIR"/filtered/"$fastq" \
+			   -a "$INDIR"/filtered/"$fasta" \
+			   -o "$sample_outdir" \
 			   -r "$INDIR"/merged/"$raw" \
 			   -R "$REFDIR" \
 			   -t $MIN_LEN
@@ -159,7 +162,7 @@ else
     printf "\n######################################################################\n"
     printf "\nRunning the DADA2 pipeline...\n"
     printf "\n######################################################################\n"
-    Rscript $SCRIPTS/dada2_pipeline.R -i $INDIR -o $OUTDIR/dada2 \
+    Rscript "$SCRIPTS"/dada2_pipeline.R -i "$INDIR" -o "$OUTDIR"/dada2 \
 	    -s $MIN_LEN -l $MAX_LEN \
 	    -F $MAXEE_F -R $MAXEE_R \
 	    
