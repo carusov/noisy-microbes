@@ -14,7 +14,7 @@ options(stringsAsFactors = FALSE)
 
 # function to load UCLUST OTU table
 load_uclust <- function(otu_file_path, seq_file_path, sample_names = NULL){
-  uclust_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
+  uclust_table <- as_tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        skip = 1, comment.char = ""))
   colnames(uclust_table)[1] <- "id"
   
@@ -41,7 +41,7 @@ load_uclust <- function(otu_file_path, seq_file_path, sample_names = NULL){
 
 # function to load UPARSE OTU table
 load_uparse <- function(otu_file_path, seq_file_path, sample_names = NULL){
-  uparse_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
+  uparse_table <- as_tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        comment.char = ""))
   colnames(uparse_table)[1] <- "id"
   
@@ -70,7 +70,7 @@ load_mothur <- function(otu_file_path, seq_file_path, sample_names = NULL){
                                        comment.char = "")
   tmp_names <- mothur_table[[2]][order(mothur_table[2])]
   mothur_table <- data.frame(t(mothur_table[, -c(1:3)]))
-  mothur_table <- as.tibble(rownames_to_column(mothur_table, var = "id"))
+  mothur_table <- as_tibble(rownames_to_column(mothur_table, var = "id"))
   colnames(mothur_table)[-1] <- tmp_names
   
   if (is.null(sample_names)){
@@ -93,7 +93,7 @@ load_mothur <- function(otu_file_path, seq_file_path, sample_names = NULL){
 
 # function to load UNOISE ZOTU table
 load_unoise <- function(otu_file_path, seq_file_path, sample_names = NULL){
-  unoise_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
+  unoise_table <- as_tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        comment.char = ""))
   colnames(unoise_table)[1] <- "id"
   
@@ -122,7 +122,7 @@ load_med <- function(otu_file_path, seq_file_path, chimera_file_path, sample_nam
   row.names(med_table) <- med_table[, 1]
   med_table <- med_table[, -1]  # remove sample name column
   med_table <- data.frame(t(med_table))   # samples as columns
-  med_table <- as.tibble(rownames_to_column(med_table, var = "id"))
+  med_table <- as_tibble(rownames_to_column(med_table, var = "id"))
   med_table$id <- str_replace(med_table$id, "X", "Node_")
   
   if (is.null(sample_names)){
@@ -155,7 +155,7 @@ load_med <- function(otu_file_path, seq_file_path, chimera_file_path, sample_nam
 
 # function to load Deblur sOTU table
 load_deblur <- function(otu_file_path, sample_names = NULL){
-  deblur_table <- as.tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
+  deblur_table <- as_tibble(read.table(file = otu_file_path, header = TRUE, sep = "\t", 
                                        skip = 1, comment.char = ""))
   colnames(deblur_table)[1] <- "sequence"
   deblur_table$sequence <- toupper(deblur_table$sequence)
@@ -187,7 +187,7 @@ load_dada2 <- function(otu_file_path, sample_names = NULL){
     dada2_table <- data.frame(t(dada2_table))
   }
   
-  dada2_table <- as.tibble(rownames_to_column(dada2_table, var = "sequence"))
+  dada2_table <- as_tibble(rownames_to_column(dada2_table, var = "sequence"))
   
   if (is.null(sample_names)){
     sample_names <- colnames(dada2_table)[-1]  
@@ -257,7 +257,7 @@ merge_tables <- function(table_list, sample_names, collapse = FALSE, id = NULL){
   }
   
   all_table <- data.frame(t(all_table))
-  all_table <- rownames_to_column(all_table, var = "sequence") %>% as.tibble()
+  all_table <- rownames_to_column(all_table, var = "sequence") %>% as_tibble()
   all_table <- all_table[order(all_table[[ names(table_list)[1] ]], decreasing = TRUE), ]
   all_table <- all_table %>% mutate(id = paste(prefix, 1:nrow(all_table), sep = "_")) %>% 
     select(id, names(table_list), sequence)
@@ -430,7 +430,7 @@ load_blast <- function(blast_path){
                             col.names = c("seqID", "seq_len", "subjectID", "subject_len", "kingdom", "sci_name", 
                                           "identity", "aln_len", "matches", "mismatches", "gapopens", "gaps", 
                                           "qstart", "qend", "sstart", "send", "evalue", "bitscore"))
-  blast_table <- as.tibble(blast_table)
+  blast_table <- as_tibble(blast_table)
   return(blast_table)
 }
 
@@ -545,9 +545,9 @@ annotate_class <- function(seq_table){
 assign_taxonomy <- function(seq_table, genus_db_path, species_db_path){
   seqs <- seq_table[["sequence"]]
   taxa <- assignTaxonomy(seqs, refFasta = genus_db_path, multithread = TRUE, verbose = TRUE)
-  taxa <- taxa %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as.tibble()
+  taxa <- taxa %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as_tibble()
   species <- assignSpecies(seqs, refFasta = species_db_path, verbose = TRUE)
-  species <- species %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as.tibble()
+  species <- species %>% as.data.frame() %>% rownames_to_column(var = "sequence") %>% as_tibble()
   
   taxa <- inner_join(taxa, species, by = "sequence")
   taxa <- taxa %>% mutate(Genus = ifelse(!is.na(Genus.x), Genus.x, Genus.y)) %>%
@@ -602,7 +602,7 @@ summarize_seqs <- function(seq_table, dist_mat, refs, sample_names, max_dist){
                               pct_ref = ref_pct, pct_ref_noisy = ref_noisy_pct, 
                               pct_contam = contam_pct, pct_contam_noisy = contam_noisy_pct,
                               pct_other = other_pct,
-                              row.names = NULL, check.names = FALSE) #%>% as.tibble
+                              row.names = NULL, check.names = FALSE) #%>% as_tibble
   return(summary_table)
 }
 
@@ -684,7 +684,7 @@ transpose_table_list <- function(old_list, old_id_col, new_id_col){
       new_table <- rbind(new_table, new_row)
     }
     colnames(new_table)[1] <- new_id_col
-    new_table <- new_table %>% select(-one_of(old_id_col)) %>% as.tibble()
+    new_table <- new_table %>% select(-one_of(old_id_col)) %>% as_tibble()
     new_list[[nn]] <- new_table
   }
   return(new_list)
@@ -728,7 +728,7 @@ compute_pr_seqs <- function(sum_table){
     mutate(recall = 100 * TP / (TP + FN),
            precision = 100 * TP / (TP + FP),
            precision_NC = 100 * TP / (TP + FP_NC)) %>%
-    as.tibble()
+    as_tibble()
   
   return(seq_stats)
 }
