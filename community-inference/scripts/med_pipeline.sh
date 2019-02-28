@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 7/27/2017
@@ -7,8 +9,8 @@
 
 
 # Set the default input file and output directory
-INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/thesis/results/dilution/med
+INFILE=""
+OUTDIR=med
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -41,7 +43,9 @@ if [ ! -d "$OUTDIR" ]; then
 fi
 
 # Open the MED environment using miniconda
+set +u
 source activate med
+set -u
 
 # Pad shorter reads with gaps so all reads have the same length.
 # (This is an MED requirement.)
@@ -49,7 +53,6 @@ o-pad-with-gaps $INFILE \
 		-o $OUTDIR/pooled_filtered_med.fasta
 
 # Finally, run the MED algorithm on the formatted fasta file   
-printf "Running the MED pipeline..."
 decompose $OUTDIR/pooled_filtered_med.fasta -o $OUTDIR \
 	  --skip-check-input-file
 
@@ -71,4 +74,6 @@ usearch9 -uchime2_denovo "$OUTDIR"/uchime/NODE-REPS-uchime.fasta \
 	 -abskew 16
 
 # Deactivate the med environment
+set +u
 source deactivate
+set -u

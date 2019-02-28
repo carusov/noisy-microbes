@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 7/13/2017
@@ -6,7 +8,7 @@
 ### (see www.qiime.org for detailed documentation)
 
 # Set the default input file, output directory, and 16S reference db
-#INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
+INFILE=""
 OUTDIR=uclust
 REF_FILE=~/thesis/references/gold.fa
 
@@ -50,7 +52,9 @@ printf "\nREFERENCE DB: \t%s" "$REF_FILE"
 printf "\n\n"
 
 # Activate the qiime environment in miniconda
+set +u
 source activate qiime1
+set -u
 
 ### The rest of the pipeline is executed with QIIME scripts
 
@@ -84,4 +88,6 @@ biom convert -i $OUTDIR/otu_table.biom \
      --to-tsv
 
 # Deactivate miniconda3 environment
+set +u
 source deactivate
+set -u

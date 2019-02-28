@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### This is a script to blast sequences from all six 16S processing methods at
 ### once.

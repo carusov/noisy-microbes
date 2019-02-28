@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 8/3/2017
@@ -6,8 +8,8 @@
 ### recommended usage (see github.com/biocore/deblur).
 
 # Set the default input file and output directory
-INFILE=~/thesis/data/dilution/filtered/pooled_filtered_qiime.fasta
-OUTDIR=~/thesis/results/dilution/deblur
+INFILE=""
+OUTDIR=deblur
 REF_FILE=~/thesis/references/silva_nr_v128_prokaryotes.fa
 
 # Parse command-line options
@@ -45,7 +47,9 @@ if [ ! -d "$OUTDIR" ]; then
 fi
 
 # First activate the deblur environment in miniconda
+set +u
 source activate deblur
+set -u
 
 # Now run the deblur workflow, using the QIIME-formatted file as input
 printf "\nRunning the deblur workflow...\n"
@@ -54,8 +58,7 @@ deblur workflow --seqs-fp $INFILE \
        -t $TRIM \
        --log-file $OUTDIR/deblur.log \
        --overwrite \
-       --jobs-to-start 4
-#       --pos-ref-fp $REF_FILE
+       --jobs-to-start $(nproc --ignore=1)
 
 # Convert the .biom files to .txt files
 if [ $(stat -c %s $OUTDIR/reference-hit.seqs.fa) != 0 ]; then
@@ -77,4 +80,6 @@ if [ $(stat -c %s $OUTDIR/all.seqs.fa) != 0 ]; then
 fi
 
 #Deactivate the deblur environmnet
+set +u
 source deactivate
+set -u

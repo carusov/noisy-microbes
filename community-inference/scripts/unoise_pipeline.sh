@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 7/1/2017
@@ -9,9 +11,9 @@
 
 
 # Set the default input file, output directory, and raw merged read file
-INFILE=~/thesis/data/dilution/filtered/pooled_filtered.fastq
-OUTDIR=~/thesis/results/dilution/unoise
-RAW_MERGED_FILE=~/thesis/data/dilution/merged/pooled_merged.fastq
+INFILE=""
+OUTDIR=unoise
+RAW_MERGED_FILE=""
 
 # Parse command-line options
 while [[ $# -gt 0 ]]
@@ -70,69 +72,3 @@ usearch -otutab $RAW_MERGED_FILE \
 	-dbmatched $OUTDIR/zotus_with_sizes.fa \
 	-notmatchedfq $OUTDIR/unmapped_reads.fastq \
 	-sizeout
-
-
-### The remaining commands are an auxiliary analysis that was not used
-### in the manuscript
-
-# Find out how many reads didn't map to OTUs
-usearch -fastx_info $OUTDIR/unmapped_reads.fastq \
-	-output $OUTDIR/unmapped_reads_info.txt
-
-# How many "hiqh quality" reads don't map to OTUS?
-usearch -fastq_filter $OUTDIR/unmapped_reads.fastq \
-	-fastq_maxee 2.0 \
-	-fastaout $OUTDIR/unmapped_hiqual.fa \
-	-fastaout_discarded $OUTDIR/unmapped_loqual.fa
-
-# Filter out the ZOTUS from the predicted amplicons, leaving just the predicted chimeras
-usearch -search_exact $OUTDIR/amplicons.fa \
-	-db $OUTDIR/zotus.fa \
-	-strand plus \
-	-notmatched $OUTDIR/chimeras.fa
-
-# Combine predicted OTUs and chimeras into a single database
-cat $OUTDIR/zotus.fa $OUTDIR/chimeras.fa \
-    > $OUTDIR/otus_chimeras.fa
-
-# Now, see how many high-quality, unmapped sequences are within 5% of an OTU or chimeric sequence
-usearch -usearch_global $OUTDIR/unmapped_hiqual.fa \
-	-db $OUTDIR/otus_chimeras.fa \
-	-strand plus \
-	-id 0.95 \
-	-matched $OUTDIR/unmatched_noisy.fa \
-	-notmatched $OUTDIR/unmatched_hiqual_other.fa
-
-# Final coverage check: see if any leftover high-quality reads map to a large database
-#usearch -usearch_global $OUTDIR/unmatched_hiqual_other.fa \
-#	-db silva.udb \
-#	-strand both \
-#	-idd 0.99 \
-#	-alnout unmapped_silva.aln
-
-### I might want to run `uchime2_ref` reference-based chimera checking with `-mode high_confidence`
-### to see if it identifies any more chimeras
-
-# usearch -uchime_ref reads.fastq \
-#         -db silva.udb \
-#         -uchimeout out.txt \
-#         -strand plus \
-#         -mode high_confidence
-
-### Also, do I want to check for "tight" OTUs (OTUs with >97% identity)? If so I could use the UCLUST
-### algorithm:
-# usearch -cluster_fast otus.fa \
-#         -id 0.97 \
-#         -maxaccepts 4 \
-#         -maxrejects 128 \
-#         -top_hit_only
-#         -uc hits.uc
-# grep"^H" hits.uc | cut -f4 | sort -g
-
-# Finally, assign taxonomy to the OTUS (I probably want to use the same assignment function for all
-# methods being benchmarked, but I'll try this one here for fun).
-#usearch -sintax otus.fa \
-#	-db silva.udb \
-#	-tabbedout sintax_taxonomy.txt \
-#	-strand both \
-#	-sintax_cutoff 0.8

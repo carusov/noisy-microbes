@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ### Author: Vincent Caruso
 ### Date: 9/20/2017
@@ -48,5 +50,5 @@ fi
 blastn -query "$INFILE" -db nt -out "$OUTFILE" \
        -task megablast -max_target_seqs 10 \
        -outfmt "7 qseqid qlen sseqid slen sskingdoms ssciname pident length nident mismatch gapopen gaps qstart qend sstart send evalue bitscore" \
-       -num_threads 4
+       -num_threads $(nproc --all)
 #       -remote

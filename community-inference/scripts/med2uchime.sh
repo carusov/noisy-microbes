@@ -1,5 +1,13 @@
-# This is a sed script to convert the MED 'NODE-REPRESENTATIVES.fasta'
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# This is a script to convert the MED 'NODE-REPRESENTATIVES.fasta'
 # output file to the format required by 'USEARCH -uchime3_denovo'
+
+# Set default parameter values
+INFILE=""
+OUTFILE=""
 
 while [[ $# -gt 0 ]]
 do
