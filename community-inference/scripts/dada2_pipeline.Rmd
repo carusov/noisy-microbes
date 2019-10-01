@@ -67,8 +67,8 @@ Next, define the working directory and file paths.
 
 data_path <- opt$input     # parent directory for raw and filtered data
 dada2_path <- opt$output    # directory for outputs of DADA2 read processsing
-# data_path <- "~/thesis/data/test"
-# dada2_path <- file.path(data_path, "dada2")     # directory where DADA2 processing results will be stored
+# data_path <- "~/repo_test/data/high_biomass/zymo"
+# dada2_path <- "~/repo_test/results/high_biomass/zymo/dada2"     # directory where DADA2 processing results will be stored
 trunc_path <- file.path(data_path, "truncated")
 filt_path <- file.path(dada2_path, "filtered")     # directory where filtered reads will be stored
 # ref_path <- "~/thesis/references"    # directory containing reference databases
