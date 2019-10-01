@@ -5,9 +5,9 @@ IFS=$'\n\t'
 ### This is a script to blast sequences from all six 16S processing methods at
 ### once.
 
-for f in *_seqs.fasta;
+for f in *_seqs*.fasta;
 do
-    name=${f%_seqs.fasta}
+    name=${f%_seqs*.fasta}
     blast_seqs.sh -i $f -o $name"_blast.txt" -t 10
     echo "Done with "$name" BLAST search"
 done
